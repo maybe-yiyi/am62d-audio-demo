@@ -3,6 +3,7 @@
 #include <pipewire/pipewire.h>
 
 #include "a53_node.h"
+#include "cJSON.h"
 
 static enum pw_direction to_pw_direction(enum am62d_port_dir dir)
 {
@@ -39,7 +40,8 @@ static const struct pw_filter_events filter_events = {
 
 struct a53_node *a53_node_create(struct pw_core *core,
 				 const struct am62d_plugin *plugin,
-				 const char *config_json)
+				 const char *node_id,
+				 const struct cJSON *config_json)
 {
 	struct a53_node *node = calloc(1, sizeof(struct a53_node));
 	if (!node)
@@ -55,6 +57,7 @@ struct a53_node *a53_node_create(struct pw_core *core,
 		pw_properties_new(
 			PW_KEY_MEDIA_TYPE, "AUDIO",
 			PW_KEY_MEDIA_CATEGORY, "FILTER",
+			"am62d.node.id", node_id,
 			NULL));
 	if (!node->filter)
 		goto destroy_plugin;
