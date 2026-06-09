@@ -5,7 +5,7 @@
 
 struct priv {};
 
-static int plugin_init(void **priv, const char *config_json)
+static int plugin_init(void **priv, const struct cJSON *config_json)
 {
 	struct priv *p = calloc(1, sizeof(*p));
 	if (!p)
@@ -26,12 +26,12 @@ static int plugin_process(void *priv, const float **in, float **out,
 	return 0;
 }
 
-static int plugin_set_param(void *priv, const char *key, const char *value_json)
+static int plugin_set_param(void *priv, const char *key, const struct cJSON *value_json)
 {
 	return 0;
 }
 
-static int plugin_get_param(void *priv, const char *key, char *out_json,
+static int plugin_get_param(void *priv, const char *key, struct cJSON *out_json,
 			    uint32_t out_len)
 {
 	return 0;
