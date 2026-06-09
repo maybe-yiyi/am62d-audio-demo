@@ -24,8 +24,11 @@ foreach plugin : plugins
   shared_library('am62d_' + plugin,
     'plugins/' + plugin + '.c',
     include_directories: inc,
+    dependencies: [cjson_dep],
     c_args: ['-fvisibility=hidden'],
     install: true,
     install_dir: '/usr/lib/am62d/plugins',
   )
 endforeach
+
+install_subdir('configs/', install_dir: '/usr/lib/am62d/')
