@@ -46,7 +46,7 @@ struct pipeline {
 	int n_port_ids;
 };
 
-struct pipeline *pipeline_create(const char *config_path);
+struct pipeline *pipeline_create(const char *config_path, const char *plugin_dir);
 void pipeline_run(struct pipeline *pl);
 void pipeline_destroy(struct pipeline *pl);
 

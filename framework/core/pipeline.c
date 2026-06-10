@@ -188,7 +188,7 @@ static const struct pw_core_events core_events = {
 	.done = on_core_done,
 };
 
-struct pipeline *pipeline_create(const char *config_path)
+struct pipeline *pipeline_create(const char *config_path, const char *plugin_dir)
 {
 	const struct cJSON *config = load_config(config_path);
 
@@ -199,7 +199,7 @@ struct pipeline *pipeline_create(const char *config_path)
 
 	struct pipeline *pl = pipewire_setup();
 
-	registry_init("/usr/lib/am62d/plugins");
+	registry_init(plugin_dir);
 
 	const struct cJSON *nodes = cJSON_GetObjectItemCaseSensitive(config, "nodes");
 	const struct cJSON *node;
