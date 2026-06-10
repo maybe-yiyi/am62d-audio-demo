@@ -22,6 +22,9 @@ static void plugin_destroy(void *priv)
 static int plugin_process(void *priv, const float **in, float **out,
 			  uint32_t n_frames)
 {
+	if (*in == NULL || *out == NULL)
+		return 1;
+
 	memcpy(*out, *in, n_frames * sizeof(float));
 	return 0;
 }
