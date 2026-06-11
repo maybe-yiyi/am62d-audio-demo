@@ -275,6 +275,7 @@ void pipeline_destroy(struct pipeline *pl)
 	pw_core_disconnect(pl->core);
 	pw_context_destroy(pl->context);
 	pw_main_loop_destroy(pl->loop);
+	pw_deinit();
 
 	cJSON_Delete(pl->config);
 
