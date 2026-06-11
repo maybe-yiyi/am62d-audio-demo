@@ -22,7 +22,7 @@ struct pipeline *pipewire_setup()
 	return pl;
 }
 
-const struct cJSON *load_config(const char *path)
+struct cJSON *load_config(const char *path)
 {
 	FILE *f = fopen(path, "r");
 	if (!f)
@@ -42,7 +42,7 @@ const struct cJSON *load_config(const char *path)
 	fclose(f);
 	buf[len] = '\0';
 
-	const struct cJSON *config = cJSON_Parse(buf);
+	struct cJSON *config = cJSON_Parse(buf);
 	free(buf);
 
 	return config;
@@ -192,45 +192,45 @@ struct pipeline *pipeline_create(const char *config_path, const char *plugin_dir
 {
 	struct pipeline *pl = pipewire_setup();
 
-	const struct cJSON *config = load_config(config_path);
+	struct cJSON *config = load_config(config_path);
 
-	const struct cJSON *name = cJSON_GetObjectItemCaseSensitive(config, "name");
+	struct cJSON *name = cJSON_GetObjectItemCaseSensitive(config, "name");
 	if (!cJSON_IsString(name))
 		return NULL;
 	printf("Loading configuration %s\n", name->valuestring);
 
 	registry_init(plugin_dir);
 
-	const struct cJSON *nodes = cJSON_GetObjectItemCaseSensitive(config, "nodes");
-	const struct cJSON *node;
+	struct cJSON *nodes = cJSON_GetObjectItemCaseSensitive(config, "nodes");
+	struct cJSON *node;
 	cJSON_ArrayForEach(node, nodes) {
-		const struct cJSON *id = cJSON_GetObjectItemCaseSensitive(node, "id");
+		struct cJSON *id = cJSON_GetObjectItemCaseSensitive(node, "id");
 		if (!cJSON_IsString(id))
 			return NULL;
 		printf("Loading node %s\n", id->valuestring);
 
-		const struct cJSON *pname = cJSON_GetObjectItemCaseSensitive(node, "plugin");
+		struct cJSON *pname = cJSON_GetObjectItemCaseSensitive(node, "plugin");
 		if (!cJSON_IsString(pname))
 			return NULL;
 
 		printf("- Loading plugin %s\n", pname->valuestring);
 		const struct am62d_plugin *plugin = registry_get(pname->valuestring);
 
-		const struct cJSON *node_config = cJSON_GetObjectItemCaseSensitive(node, "config");
+		struct cJSON *node_config = cJSON_GetObjectItemCaseSensitive(node, "config");
 		struct a53_node *a53_node = a53_node_create(pl->core, plugin, id->valuestring, node_config);
 		if (!a53_node)
 			return NULL;
 		pl->nodes[pl->n_nodes++] = a53_node;
 	}
 
-	const struct cJSON *links = cJSON_GetObjectItemCaseSensitive(config, "links");
-	const struct cJSON *link;
+	struct cJSON *links = cJSON_GetObjectItemCaseSensitive(config, "links");
+	struct cJSON *link;
 	cJSON_ArrayForEach(link, links) {
-		const struct cJSON *from = cJSON_GetObjectItemCaseSensitive(link, "from");
+		struct cJSON *from = cJSON_GetObjectItemCaseSensitive(link, "from");
 		if (!cJSON_IsString(from))
 			return NULL;
 
-		const struct cJSON *to = cJSON_GetObjectItemCaseSensitive(link, "to");
+		struct cJSON *to = cJSON_GetObjectItemCaseSensitive(link, "to");
 		if (!cJSON_IsString(to))
 			return NULL;
 
