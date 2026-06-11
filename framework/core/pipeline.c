@@ -120,9 +120,9 @@ static void on_global(void *data, uint32_t id, uint32_t permissions,
 	struct pipeline *pl = data;
 
 	if (strcmp(type, PW_TYPE_INTERFACE_Node) == 0) {
-		const char *am62d_id = spa_dict_lookup(props, "am62d.node.id");
-		if (am62d_id)
-			pipeline_record_node_id(pl, am62d_id, id);
+		const char *node_name = spa_dict_lookup(props, "node.name");
+		if (node_name)
+			pipeline_record_node_id(pl, node_name, id);
 	}
 
 	if (strcmp(type, PW_TYPE_INTERFACE_Port) == 0) {
