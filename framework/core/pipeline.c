@@ -5,7 +5,7 @@
 #include <pipewire/pipewire.h>
 
 #include "a53_node.h"
-#include "cJSON.h"
+#include "config.h"
 #include "pipeline.h"
 #include "registry.h"
 
@@ -20,32 +20,6 @@ struct pipeline *pipewire_setup()
 	pl->core = pw_context_connect(pl->context, NULL, 0);
 
 	return pl;
-}
-
-struct cJSON *load_config(const char *path)
-{
-	FILE *f = fopen(path, "r");
-	if (!f)
-		return NULL;
-
-	fseek(f, 0, SEEK_END);
-	long len = ftell(f);
-	rewind(f);
-
-	char *buf = malloc(len + 1);
-	if (!buf) {
-		fclose(f);
-		return NULL;
-	}
-
-	fread(buf, 1, len, f);
-	fclose(f);
-	buf[len] = '\0';
-
-	struct cJSON *config = cJSON_Parse(buf);
-	free(buf);
-
-	return config;
 }
 
 static uint32_t find_node_id(struct pipeline *pl, const char *config_id)
@@ -67,16 +41,18 @@ static uint32_t find_port_id(struct pipeline *pl, uint32_t pw_node_id, const cha
 
 static void pipeline_create_links(struct pipeline *pl)
 {
-	for (int i = 0; i < pl->n_links; i++) {
+	for (int i = 0; i < pl->config->n_links; i++) {
+		struct link_config link = pl->config->links[i];
+
 		char from_node[64];
 		char from_port[64];
 		char to_node[64];
 		char to_port[64];
 
-		if (sscanf(pl->links[i].from, "%63[^:]:%63s", from_node, from_port) != 2 ||
-			sscanf(pl->links[i].to, "%63[^:]:%63s", to_node, to_port) != 2) {
+		if (sscanf(link.from, "%63[^:]:%63s", from_node, from_port) != 2 ||
+			sscanf(link.to, "%63[^:]:%63s", to_node, to_port) != 2) {
 			fprintf(stderr, "pipeline: malformed link '%s' -> '%s'\n",
-				pl->links[i].from, pl->links[i].to);
+				link.from, link.to);
 			continue;
 		}
 
@@ -88,7 +64,7 @@ static void pipeline_create_links(struct pipeline *pl)
 		if (out_node == SPA_ID_INVALID || out_port == SPA_ID_INVALID ||
 			in_node == SPA_ID_INVALID || in_port == SPA_ID_INVALID) {
 			fprintf(stderr, "pipeline: could not resolve link '%s' -> '%s'\n",
-				pl->links[i].from, pl->links[i].to);
+				link.from, link.to);
 			continue;
 		}
 
@@ -98,7 +74,7 @@ static void pipeline_create_links(struct pipeline *pl)
 		snprintf(s_in_node,  sizeof(s_in_node),  "%u", in_node);
 		snprintf(s_in_port,  sizeof(s_in_port),  "%u", in_port);
 
-		printf("Linking '%s' -> '%s'\n", pl->links[i].from, pl->links[i].to);
+		printf("Linking '%s' -> '%s'\n", link.from, link.to);
 		pw_core_create_object(pl->core, "link-factory",
 			PW_TYPE_INTERFACE_Link, PW_VERSION_LINK,
 			&SPA_DICT_INIT_ARRAY(((struct spa_dict_item[4]) {
@@ -192,51 +168,21 @@ struct pipeline *pipeline_create(const char *config_path, const char *plugin_dir
 {
 	struct pipeline *pl = pipewire_setup();
 
-	pl->config = load_config(config_path);
-
-	struct cJSON *name = cJSON_GetObjectItemCaseSensitive(pl->config, "name");
-	if (!cJSON_IsString(name))
-		return NULL;
-	printf("Loading configuration %s\n", name->valuestring);
+	pl->config = config_load(config_path);
+	printf("Loading configuration %s\n", pl->config->name);
 
 	registry_init(plugin_dir);
 
-	struct cJSON *nodes = cJSON_GetObjectItemCaseSensitive(pl->config, "nodes");
-	struct cJSON *node;
-	cJSON_ArrayForEach(node, nodes) {
-		struct cJSON *id = cJSON_GetObjectItemCaseSensitive(node, "id");
-		if (!cJSON_IsString(id))
-			return NULL;
-		printf("Loading node %s\n", id->valuestring);
+	for (int i = 0; i < pl->config->n_nodes; i++) {
+		struct node_config node_conf = pl->config->nodes[i];
+		printf("Loading node %s\n", node_conf.id);
 
-		struct cJSON *pname = cJSON_GetObjectItemCaseSensitive(node, "plugin");
-		if (!cJSON_IsString(pname))
-			return NULL;
+		const struct am62d_plugin *plugin = registry_get(node_conf.plugin);
 
-		printf("- Loading plugin %s\n", pname->valuestring);
-		const struct am62d_plugin *plugin = registry_get(pname->valuestring);
-
-		struct cJSON *node_config = cJSON_GetObjectItemCaseSensitive(node, "config");
-		struct a53_node *a53_node = a53_node_create(pl->core, plugin, id->valuestring, node_config);
+		struct a53_node *a53_node = a53_node_create(pl->core, plugin, node_conf.id, node_conf.params);
 		if (!a53_node)
 			return NULL;
 		pl->nodes[pl->n_nodes++] = a53_node;
-	}
-
-	struct cJSON *links = cJSON_GetObjectItemCaseSensitive(pl->config, "links");
-	struct cJSON *link;
-	cJSON_ArrayForEach(link, links) {
-		struct cJSON *from = cJSON_GetObjectItemCaseSensitive(link, "from");
-		if (!cJSON_IsString(from))
-			return NULL;
-
-		struct cJSON *to = cJSON_GetObjectItemCaseSensitive(link, "to");
-		if (!cJSON_IsString(to))
-			return NULL;
-
-		snprintf(pl->links[pl->n_links].from, sizeof(pl->links[0].from), "%s", from->valuestring);
-		snprintf(pl->links[pl->n_links].to, sizeof(pl->links[0].to), "%s", to->valuestring);
-		pl->n_links++;
 	}
 
 	pl->registry = pw_core_get_registry(pl->core, PW_VERSION_REGISTRY, 0);
@@ -277,7 +223,7 @@ void pipeline_destroy(struct pipeline *pl)
 	pw_main_loop_destroy(pl->loop);
 	pw_deinit();
 
-	cJSON_Delete(pl->config);
+	config_free(pl->config);
 
 	free(pl);
 }
