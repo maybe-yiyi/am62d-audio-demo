@@ -35,6 +35,8 @@ struct pipeline {
 	int sync_seq;
 	int sync_phase;
 
+	struct cJSON *config;
+
 	struct a53_node *nodes[MAX_NODES];
 	int n_nodes;
 	struct link_desc links[MAX_LINKS];

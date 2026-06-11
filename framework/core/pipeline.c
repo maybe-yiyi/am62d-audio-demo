@@ -192,16 +192,16 @@ struct pipeline *pipeline_create(const char *config_path, const char *plugin_dir
 {
 	struct pipeline *pl = pipewire_setup();
 
-	struct cJSON *config = load_config(config_path);
+	pl->config = load_config(config_path);
 
-	struct cJSON *name = cJSON_GetObjectItemCaseSensitive(config, "name");
+	struct cJSON *name = cJSON_GetObjectItemCaseSensitive(pl->config, "name");
 	if (!cJSON_IsString(name))
 		return NULL;
 	printf("Loading configuration %s\n", name->valuestring);
 
 	registry_init(plugin_dir);
 
-	struct cJSON *nodes = cJSON_GetObjectItemCaseSensitive(config, "nodes");
+	struct cJSON *nodes = cJSON_GetObjectItemCaseSensitive(pl->config, "nodes");
 	struct cJSON *node;
 	cJSON_ArrayForEach(node, nodes) {
 		struct cJSON *id = cJSON_GetObjectItemCaseSensitive(node, "id");
@@ -223,7 +223,7 @@ struct pipeline *pipeline_create(const char *config_path, const char *plugin_dir
 		pl->nodes[pl->n_nodes++] = a53_node;
 	}
 
-	struct cJSON *links = cJSON_GetObjectItemCaseSensitive(config, "links");
+	struct cJSON *links = cJSON_GetObjectItemCaseSensitive(pl->config, "links");
 	struct cJSON *link;
 	cJSON_ArrayForEach(link, links) {
 		struct cJSON *from = cJSON_GetObjectItemCaseSensitive(link, "from");
@@ -275,6 +275,8 @@ void pipeline_destroy(struct pipeline *pl)
 	pw_core_disconnect(pl->core);
 	pw_context_destroy(pl->context);
 	pw_main_loop_destroy(pl->loop);
+
+	cJSON_Delete(pl->config);
 
 	free(pl);
 }
