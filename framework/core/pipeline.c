@@ -239,9 +239,9 @@ struct pipeline *pipeline_create(const char *config_path, const char *plugin_dir
 		pl->n_links++;
 	}
 
-	struct pw_registry *registry = pw_core_get_registry(pl->core, PW_VERSION_REGISTRY, 0);
+	pl->registry = pw_core_get_registry(pl->core, PW_VERSION_REGISTRY, 0);
 
-	pw_registry_add_listener(registry, &pl->registry_listener, &registry_events, pl);
+	pw_registry_add_listener(pl->registry, &pl->registry_listener, &registry_events, pl);
 
 	pw_core_add_listener(pl->core, &pl->core_listener, &core_events, pl);
 	pl->sync_seq = pw_core_sync(pl->core, PW_ID_CORE, pl->sync_seq);
