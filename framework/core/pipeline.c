@@ -190,14 +190,14 @@ static const struct pw_core_events core_events = {
 
 struct pipeline *pipeline_create(const char *config_path, const char *plugin_dir)
 {
+	struct pipeline *pl = pipewire_setup();
+
 	const struct cJSON *config = load_config(config_path);
 
 	const struct cJSON *name = cJSON_GetObjectItemCaseSensitive(config, "name");
 	if (!cJSON_IsString(name))
 		return NULL;
 	printf("Loading configuration %s\n", name->valuestring);
-
-	struct pipeline *pl = pipewire_setup();
 
 	registry_init(plugin_dir);
 
