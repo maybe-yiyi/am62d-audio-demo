@@ -1,8 +1,16 @@
 #include <getopt.h>
+#include <pthread.h>
+#include <signal.h>
 
 #include "pipeline.h"
 
 int main(int argc, char *argv[]) {
+	sigset_t ss;
+	sigemptyset(&ss);
+	sigaddset(&ss, SIGINT);
+	sigaddset(&ss, SIGTERM);
+	pthread_sigmask(SIG_BLOCK, &ss, NULL);
+
 	const char *config_path = NULL;
 	const char *plugin_dir = NULL;
 
