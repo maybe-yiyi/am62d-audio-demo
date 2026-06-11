@@ -266,10 +266,10 @@ void pipeline_run(struct pipeline *pl)
 
 void pipeline_destroy(struct pipeline *pl)
 {
-	registry_destroy();
-
 	for (int i = 0; i < pl->n_nodes; i++)
 		a53_node_destroy(pl->nodes[i]);
+
+	registry_destroy();
 
 	pw_proxy_destroy((struct pw_proxy *)pl->registry);
 	pw_core_disconnect(pl->core);
