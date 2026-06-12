@@ -146,11 +146,11 @@ static void on_core_done(void *data, uint32_t id, int seq)
 	if (seq == pl->sync_seq) {
 		printf("Received sync %d\n", pl->sync_phase);
 		switch (pl->sync_phase) {
-		case 0:
+		case SYNC_PHASE_WAIT_REGISTRY:
 			pl->sync_seq = pw_core_sync(pl->core, PW_ID_CORE, 1);
-			pl->sync_phase++;
+			pl->sync_phase = SYNC_PHASE_CREATE_LINKS;
 			break;
-		case 1:
+		case SYNC_PHASE_CREATE_LINKS:
 			pipeline_create_links(pl);
 			break;
 		default:

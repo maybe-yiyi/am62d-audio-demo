@@ -19,6 +19,11 @@ struct port_id_entry {
 	uint32_t pw_port_id;
 };
 
+enum sync_phase {
+	SYNC_PHASE_WAIT_REGISTRY = 0,
+	SYNC_PHASE_CREATE_LINKS = 1,
+};
+
 struct pipeline {
 	struct pw_main_loop *loop;
 	struct pw_context *context;
@@ -27,7 +32,7 @@ struct pipeline {
 	struct spa_hook registry_listener;
 	struct spa_hook core_listener;
 	int sync_seq;
-	int sync_phase;
+	enum sync_phase sync_phase;
 
 	struct pipeline_config *config;
 
