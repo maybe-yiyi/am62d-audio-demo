@@ -1,9 +1,12 @@
 {
   "name": "passthrough",
   "nodes": [
-    { "id": "ptl", "plugin": "passthrough", "config": {} },
-    { "id": "ptr", "plugin": "passthrough", "config": {} }
+    { "id": "pt", "plugin": "passthrough", "config": {} }
   ],
   "links": [
+    { "from": "pw-play:output_FL", "to": "pt:in_l" },
+    { "from": "pt:out_l", "to": "alsa_output.platform-sound.stereo-fallback:playback_FL" },
+    { "from": "pw-play:output_FR", "to": "pt:in_r" },
+    { "from": "pt:out_r", "to": "alsa_output.platform-sound.stereo-fallback:playback_FR" }
   ]
 }

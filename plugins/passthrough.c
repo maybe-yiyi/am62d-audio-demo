@@ -41,8 +41,10 @@ static int plugin_get_param(void *priv, const char *key, struct cJSON *out_json,
 }
 
 static const struct am62d_port_desc ports[] = {
-	{ "in", AM62D_PORT_AUDIO_PCM, AM62D_DIR_IN, {{1}} },
-	{ "out", AM62D_PORT_AUDIO_PCM, AM62D_DIR_OUT, {{1}} }
+	{ "in_l", AM62D_PORT_AUDIO_PCM, AM62D_DIR_IN, {{1}} },
+	{ "out_l", AM62D_PORT_AUDIO_PCM, AM62D_DIR_OUT, {{1}} },
+	{ "in_r", AM62D_PORT_AUDIO_PCM, AM62D_DIR_IN, {{1}} },
+	{ "out_r", AM62D_PORT_AUDIO_PCM, AM62D_DIR_OUT, {{1}} }
 };
 
 AM62D_PLUGIN_EXPORT const struct am62d_plugin AM62D_PLUGIN_ENTRY = {
