@@ -1,0 +1,9 @@
+{
+  "name": "passthrough",
+  "nodes": [
+    { "id": "ptl", "plugin": "passthrough", "config": {} },
+    { "id": "ptr", "plugin": "passthrough", "config": {} }
+  ],
+  "links": [
+  ]
+}
