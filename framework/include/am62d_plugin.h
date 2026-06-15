@@ -8,9 +8,25 @@
 
 #define AM62D_ABI_MAGIC	0x41363244
 #define AM62D_ABI_MAJOR	0
-#define AM62D_ABI_MINOR	1
+#define AM62D_ABI_MINOR	2
 
 #define AM62D_PLUGIN_EXPORT __attribute__((visibility("default")))
+
+#define AM62D_DATA_VAD_RESULT		0x01
+
+struct am62d_data_buf {
+	uint64_t seq;
+	uint32_t type_tag;
+	uint32_t payload_size;
+	uint8_t payload[];
+};
+
+struct am62d_vad_result {
+	float voice_probability;
+	uint8_t is_voiced;
+	uint8_t _pad[3];
+	uint64_t frame_idx;
+};
 
 enum am62d_executor {
 	AM62D_EXEC_A53,
@@ -38,7 +54,10 @@ struct am62d_port_desc {
 		struct {
 			uint32_t n_channels;
 		} pcm; /* pcm and spectrum */
-		/* metadata and control, no params */
+		struct {
+			uint32_t payload_size;
+			uint32_t type_tag;
+		} meta;
 	} u;
 };
 
