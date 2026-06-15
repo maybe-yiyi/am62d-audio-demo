@@ -1,0 +1,5 @@
+option('plugins',
+  type: 'array',
+  choices: ['passthrough'],
+  value: ['passthrough'],
+  description: 'Plugins to build')

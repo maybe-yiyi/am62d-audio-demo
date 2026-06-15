@@ -16,9 +16,7 @@ executable('am62d-pipeline',
   dependencies: [dependency('libpipewire-0.3'), dl_dep, cjson_dep]
 )
 
-plugins = [
-  'passthrough',
-]
+plugins = get_option('plugins')
 
 foreach plugin : plugins
   shared_library('am62d_' + plugin,
