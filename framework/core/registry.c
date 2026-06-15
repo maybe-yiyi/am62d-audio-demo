@@ -63,7 +63,7 @@ const struct am62d_plugin *registry_get(const char *name)
 			name, p->abi_major, AM62D_ABI_MAJOR);
 		goto close_handle;
 	}
-	if (p->abi_minor < AM62D_ABI_MINOR) {
+	if (p->abi_minor > AM62D_ABI_MINOR) {
 		fprintf(stderr, "registry: %s minor ABI version mismatch: got %u, expected %u\n",
 			name, p->abi_minor, AM62D_ABI_MINOR);
 		goto close_handle;
