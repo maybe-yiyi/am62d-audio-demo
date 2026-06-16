@@ -68,33 +68,34 @@ struct a53_node *a53_node_create(struct pw_core *core,
 			node);
 
 	for (int i = 0; i < plugin->n_ports; i++) {
-		if (plugin->ports[i].type == AM62D_PORT_METADATA ||
-			plugin->ports[i].type == AM62D_PORT_CONTROL)
+		const struct am62d_port_desc *desc = &plugin->ports[i];
+
+		if (desc->type == AM62D_PORT_METADATA ||
+			desc->type == AM62D_PORT_CONTROL)
 			continue;
 
 		char dsp_format[64];
-		uint32_t ch = plugin->ports[i].u.pcm.n_channels;
+		uint32_t ch = desc->u.pcm.n_channels;
 		if (ch == 1)
 			snprintf(dsp_format, sizeof(dsp_format), "32 bit float mono audio");
 		else
 			snprintf(dsp_format, sizeof(dsp_format), "32 bit %u channel audio", ch);
 
 		struct port_data *pd = pw_filter_add_port(node->filter,
-				to_pw_direction(plugin->ports[i].dir),
+				to_pw_direction(desc->dir),
 				PW_FILTER_PORT_FLAG_MAP_BUFFERS,
 				sizeof(struct port_data),
 				pw_properties_new(
 					PW_KEY_FORMAT_DSP, dsp_format,
-					PW_KEY_PORT_NAME, plugin->ports[i].name,
+					PW_KEY_PORT_NAME, desc->name,
 					NULL),
 				NULL, 0);
 		if (!pd)
 			goto destroy_filter;
 
-		struct port_data **port_arr = (plugin->ports[i].dir == AM62D_DIR_IN)
+		struct port_data **port_arr = (desc->dir == AM62D_DIR_IN)
 			? node->in_ports : node->out_ports;
-		int *n = (plugin->ports[i].dir == AM62D_DIR_IN)
-			? &node->n_in : &node->n_out;
+		int *n = (desc->dir == AM62D_DIR_IN) ? &node->n_in : &node->n_out;
 
 		if (*n >= MAX_PORTS)
 			goto destroy_filter;
