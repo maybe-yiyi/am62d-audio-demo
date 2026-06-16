@@ -8,9 +8,25 @@
 
 #define AM62D_ABI_MAGIC	0x41363244
 #define AM62D_ABI_MAJOR	0
-#define AM62D_ABI_MINOR	2
+#define AM62D_ABI_MINOR	3
 
 #define AM62D_PLUGIN_EXPORT __attribute__((visibility("default")))
+
+enum am62d_param_type {
+	AM62D_PARAM_INT,
+	AM62D_PARAM_FLOAT,
+	AM62D_PARAM_STRING,
+};
+
+struct am62d_param {
+	const char *key;
+	enum am62d_param_type type;
+	union {
+		int32_t i;
+		float f;
+		const char *s;
+	} v;
+};
 
 #define AM62D_DATA_VAD_RESULT		0x01
 
@@ -20,6 +36,16 @@ struct am62d_data_buf {
 	uint32_t payload_size;
 	uint8_t payload[];
 };
+
+static inline void am62d_buf_commit(struct am62d_data_buf *buf)
+{
+	__atomic_fetch_add(&buf->seq, 1, __ATOMIC_RELEASE);
+}
+
+static inline uint64_t am62d_buf_seq(const struct am62d_data_buf *buf)
+{
+	return __atomic_load_n(&buf->seq, __ATOMIC_ACQUIRE);
+}
 
 struct am62d_vad_result {
 	float voice_probability;
@@ -78,6 +104,7 @@ struct am62d_plugin {
 	int (*set_param)(void *priv, const char *key, const struct cJSON *value_json);
 	int (*get_param)(void *priv, const char *key, struct cJSON *out_json,
 			 uint32_t out_len);
+	int (*set_control)(void *priv, const char *key, float value);
 };
 
 extern const struct am62d_plugin AM62D_PLUGIN_ENTRY;
