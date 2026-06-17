@@ -40,6 +40,37 @@ static uint32_t find_port_id(struct pipeline *pl, uint32_t pw_node_id, const cha
 	return SPA_ID_INVALID;
 }
 
+static struct a53_node *pipeline_find_node(struct pipeline *pl, const char *config_id)
+{
+	for (int i = 0; i < pl->n_nodes; i++)
+		if (strcmp(pl->config->nodes[i].id, config_id) == 0)
+			return pl->nodes[i];
+	return NULL;
+}
+
+static int port_type(const struct a53_node *node, const char *port_name)
+{
+	for (int i = 0; i < node->plugin->n_ports; i++)
+		if (strcmp(node->plugin->ports[i].name, port_name) == 0)
+			return node->plugin->ports[i].type;
+	return -1;
+}
+
+static int meta_idx(const struct a53_node *node, const char *port_name,
+		    enum am62d_port_dir dir)
+{
+	int idx = 0;
+	for (int i = 0; i < node->plugin->n_ports; i++) {
+		const struct am62d_port_desc *pd = &node->plugin->ports[i];
+		if (pd->type != AM62D_PORT_METADATA || pd->dir != dir)
+			continue;
+		if (strcmp(pd->name, port_name) == 0)
+			return idx;
+		idx++;
+	}
+	return -1;
+}
+
 static void pipeline_create_links(struct pipeline *pl)
 {
 	for (int i = 0; i < pl->config->n_links; i++) {
