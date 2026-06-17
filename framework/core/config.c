@@ -86,7 +86,6 @@ struct pipeline_config *config_load(const char *path)
 
 		struct cJSON *params = cJSON_GetObjectItemCaseSensitive(node, "config");
 		if (params) {
-			conf->nodes[conf->n_nodes].params = params;
 			const struct cJSON *item;
 			cJSON_ArrayForEach(item, params) {
 				if (conf->nodes[conf->n_nodes].n_params >= MAX_NODE_PARAMS)

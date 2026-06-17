@@ -11,7 +11,6 @@
 struct node_config {
 	char id[64];
 	char plugin[64];
-	struct cJSON *params;
 	struct am62d_param typed_params[MAX_NODE_PARAMS];
 	int n_params;
 };
