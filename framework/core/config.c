@@ -154,6 +154,48 @@ struct pipeline_config *config_load(const char *path)
 		conf->n_links++;
 	}
 
+	struct cJSON *ctrl_links = cJSON_GetObjectItemCaseSensitive(conf->json, "control_links");
+	struct cJSON *ctrl_link;
+	cJSON_ArrayForEach(ctrl_link, ctrl_links) {
+		struct cJSON *from = cJSON_GetObjectItemCaseSensitive(ctrl_link, "from");
+		if (cJSON_IsString(from)) {
+			int ret = snprintf(conf->ctrl_links[conf->n_ctrl_links].from,
+					sizeof(conf->ctrl_links[0].from),
+					"%s", from->valuestring);
+			if (ret >= (int)sizeof(conf->ctrl_links[0].from))
+				fprintf(stderr, "config: control_link 'from' truncated\n");
+		} else {
+			fprintf(stderr, "config: control_link 'from' missing or malformed\n");
+			goto cleanup_json;
+		}
+
+		struct cJSON *to = cJSON_GetObjectItemCaseSensitive(ctrl_link, "to");
+		if (cJSON_IsString(to)) {
+			int ret = snprintf(conf->ctrl_links[conf->n_ctrl_links].to,
+					sizeof(conf->ctrl_links[0].to),
+					"%s", to->valuestring);
+			if (ret >= (int)sizeof(conf->ctrl_links[0].to))
+				fprintf(stderr, "config: control_link 'to' truncated\n");
+		} else {
+			fprintf(stderr, "config: control_link 'to' missing or malformed\n");
+			goto cleanup_json;
+		}
+
+		struct cJSON *param = cJSON_GetObjectItemCaseSensitive(ctrl_link, "param");
+		if (cJSON_IsString(param)) {
+			int ret = snprintf(conf->ctrl_links[conf->n_ctrl_links].param,
+					sizeof(conf->ctrl_links[0].param),
+					"%s", param->valuestring);
+			if (ret >= (int)sizeof(conf->ctrl_links[0].param))
+				fprintf(stderr, "config: control_link 'param' truncated\n");
+		} else {
+			fprintf(stderr, "config: control_link 'param' missing or malformed\n");
+			goto cleanup_json;
+		}
+
+		conf->n_ctrl_links++;
+	}
+
 	return conf;
 
 cleanup_json:

@@ -5,6 +5,7 @@
 
 #define MAX_NODES 16
 #define MAX_LINKS 32
+#define MAX_CTRL_LINKS 32
 #define MAX_NODE_PARAMS 64
 
 struct node_config {
@@ -20,12 +21,20 @@ struct link_config {
 	char to[128];
 };
 
+struct control_link_config {
+	char from[128];
+	char to[64];
+	char param[64];
+};
+
 struct pipeline_config {
 	char name[64];
 	struct node_config nodes[MAX_NODES];
 	int n_nodes;
 	struct link_config links[MAX_LINKS];
 	int n_links;
+	struct control_link_config ctrl_links[MAX_CTRL_LINKS];
+	int n_ctrl_links;
 	struct cJSON *json;
 };
 
