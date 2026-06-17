@@ -5,8 +5,9 @@
 
 struct priv {};
 
-static int plugin_init(void **priv, const struct cJSON *config_json)
+static int plugin_init(void **priv, const struct am62d_param *params, int n_params)
 {
+	(void)params; (void)n_params;
 	struct priv *p = calloc(1, sizeof(*p));
 	if (!p)
 		return -1;
@@ -19,24 +20,19 @@ static void plugin_destroy(void *priv)
 	free(priv);
 }
 
-static int plugin_process(void *priv, const float **in, float **out,
-			  uint32_t n_frames)
+static int plugin_process(void *priv,
+			  const float **in, float **out, uint32_t n_frames,
+			  struct am62d_data_buf *const *in_meta,
+			  struct am62d_data_buf **out_meta,
+			  float *out_ctrl)
 {
-	if (*in == NULL || *out == NULL)
+	(void)priv; (void)in_meta; (void)out_meta; (void)out_ctrl;
+
+	if (in[0] == NULL || out[0] == NULL || in[1] == NULL || out[1] == NULL)
 		return 1;
 
-	memcpy(*out, *in, n_frames * sizeof(float));
-	return 0;
-}
-
-static int plugin_set_param(void *priv, const char *key, const struct cJSON *value_json)
-{
-	return 0;
-}
-
-static int plugin_get_param(void *priv, const char *key, struct cJSON *out_json,
-			    uint32_t out_len)
-{
+	memcpy(out[0], in[0], n_frames * sizeof(float));
+	memcpy(out[1], in[1], n_frames * sizeof(float));
 	return 0;
 }
 
@@ -58,6 +54,4 @@ AM62D_PLUGIN_EXPORT const struct am62d_plugin AM62D_PLUGIN_ENTRY = {
 	.init = plugin_init,
 	.destroy = plugin_destroy,
 	.process = plugin_process,
-	.set_param = plugin_set_param,
-	.get_param = plugin_get_param
 };
