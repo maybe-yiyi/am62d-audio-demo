@@ -4,11 +4,9 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#include "cJSON.h"
-
 #define AM62D_ABI_MAGIC	0x41363244
-#define AM62D_ABI_MAJOR	0
-#define AM62D_ABI_MINOR	3
+#define AM62D_ABI_MAJOR	1
+#define AM62D_ABI_MINOR	0
 
 #define AM62D_PLUGIN_EXPORT __attribute__((visibility("default")))
 
@@ -97,13 +95,13 @@ struct am62d_plugin {
 	const struct am62d_port_desc *ports;
 	uint32_t n_ports;
 
-	int (*init)(void **priv, const struct cJSON *config_json);
+	int (*init)(void **priv, const struct am62d_param *params, int n_params);
 	void (*destroy)(void *priv);
 	int (*process)(void *priv, const float **in, float **out,
-		       uint32_t n_frames);
-	int (*set_param)(void *priv, const char *key, const struct cJSON *value_json);
-	int (*get_param)(void *priv, const char *key, struct cJSON *out_json,
-			 uint32_t out_len);
+		       uint32_t n_frames,
+		       struct am62d_data_buf *const *in_meta,
+		       struct am62d_data_buf **out_meta,
+		       float *out_ctrl);
 	int (*set_control)(void *priv, const char *key, float value);
 };
 

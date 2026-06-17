@@ -284,7 +284,8 @@ struct pipeline *pipeline_create(const char *config_path, const char *plugin_dir
 
 		const struct am62d_plugin *plugin = registry_get(node_conf.plugin);
 
-		struct a53_node *a53_node = a53_node_create(pl->core, plugin, node_conf.id, node_conf.params);
+		struct a53_node *a53_node = a53_node_create(pl->core, plugin, node_conf.id,
+						node_conf.typed_params, node_conf.n_params);
 		if (!a53_node)
 			return NULL;
 		pl->nodes[pl->n_nodes++] = a53_node;

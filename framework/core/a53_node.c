@@ -31,7 +31,10 @@ static void on_process(void *data, struct spa_io_position *pos)
 	for (int i = 0; i < node->n_out; i++)
 		out[i] = pw_filter_get_dsp_buffer(node->out_ports[i], n_frames);
 
-	node->plugin->process(node->priv, in, out, n_frames);
+	node->plugin->process(node->priv, in, out, n_frames,
+			(struct am62d_data_buf *const *)node->meta_in,
+			node->meta_out,
+			node->ctrl_out_vals);
 
 	param_bus_dispatch(node);
 }
@@ -44,7 +47,8 @@ static const struct pw_filter_events filter_events = {
 struct a53_node *a53_node_create(struct pw_core *core,
 				 const struct am62d_plugin *plugin,
 				 const char *node_name,
-				 const struct cJSON *config_json)
+				 const struct am62d_param *params,
+				 int n_params)
 {
 	struct a53_node *node = calloc(1, sizeof(struct a53_node));
 	if (!node)
@@ -52,7 +56,7 @@ struct a53_node *a53_node_create(struct pw_core *core,
 
 	node->plugin = plugin;
 
-	int ret = plugin->init(&node->priv, config_json);
+	int ret = plugin->init(&node->priv, params, n_params);
 	if (ret < 0)
 		goto free_node;
 

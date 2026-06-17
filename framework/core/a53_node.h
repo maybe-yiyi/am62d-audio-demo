@@ -4,7 +4,6 @@
 #include <pipewire/pipewire.h>
 
 #include "am62d_plugin.h"
-#include "cJSON.h"
 
 #define MAX_PORTS 8
 #define MAX_CTRL_ROUTES 8
@@ -43,7 +42,8 @@ struct a53_node {
 struct a53_node *a53_node_create(struct pw_core *core,
 				 const struct am62d_plugin *plugin,
 				 const char *node_id,
-				 const struct cJSON *config_json);
+				 const struct am62d_param *params,
+				 int n_params);
 void a53_node_destroy(struct a53_node *node);
 
 #endif
