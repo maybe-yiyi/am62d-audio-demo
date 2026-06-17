@@ -7,6 +7,7 @@
 #include "a53_node.h"
 #include "am62d_plugin.h"
 #include "config.h"
+#include "param_bus.h"
 #include "pipeline.h"
 #include "registry.h"
 
@@ -71,6 +72,69 @@ static int meta_idx(const struct a53_node *node, const char *port_name,
 	return -1;
 }
 
+static void pipeline_wire_control_links(struct pipeline *pl)
+{
+	for (int i = 0; i < pl->config->n_ctrl_links; i++) {
+		const struct control_link_config *clc = &pl->config->ctrl_links[i];
+
+		char src_node_id[64];
+		char src_port_name[64];
+		if (sscanf(clc->from, "%63[^:]:%63s", src_node_id, src_port_name) != 2) {
+			fprintf(stderr, "pipeline: malformed control link 'from': %s\n",
+				clc->from);
+			continue;
+		}
+
+		struct a53_node *src = pipeline_find_node(pl, src_node_id);
+		struct a53_node *dst = pipeline_find_node(pl, clc->to);
+		if (!src || !dst) {
+			fprintf(stderr, "pipeline: control link failed: %s -> %s\n",
+				clc->from, clc->to);
+			continue;
+		}
+
+		if (param_bus_register(src, src_port_name, dst, clc->param) < 0) {
+			fprintf(stderr, "pipeline: control link failed: %s -> %s.%s\n",
+				clc->from, clc->to, clc->param);
+			continue;
+		}
+		printf("Registered control %s -> %s.%s\n", clc->from, clc->to, clc->param);
+	}
+}
+
+static void pipeline_wire_metadata(struct pipeline *pl)
+{
+	for (int i = 0; i < pl->config->n_links; i++) {
+		struct link_config *lc = &pl->config->links[i];
+
+		char src_node_id[64], src_port_name[64];
+		char dst_node_id[64], dst_port_name[64];
+		if (sscanf(lc->from, "%63[^:]:%63s", src_node_id, src_port_name) != 2 ||
+		    sscanf(lc->to,   "%63[^:]:%63s", dst_node_id, dst_port_name) != 2)
+			continue;
+
+		struct a53_node *src = pipeline_find_node(pl, src_node_id);
+		struct a53_node *dst = pipeline_find_node(pl, dst_node_id);
+		if (!src || !dst)
+			continue;
+
+		if (port_type(src, src_port_name) != AM62D_PORT_METADATA)
+			continue;
+
+		int src_idx = meta_idx(src, src_port_name, AM62D_DIR_OUT);
+		int dst_idx = meta_idx(dst, dst_port_name, AM62D_DIR_IN);
+
+		if (src_idx < 0 || dst_idx < 0) {
+			fprintf(stderr, "pipeline: metadata wire failed: %s -> %s\n",
+				lc->from, lc->to);
+			continue;
+		}
+
+		dst->meta_in[dst_idx] = src->meta_out[src_idx];
+		printf("Wired metadata %s -> %s\n", lc->from, lc->to);
+	}
+}
+
 static void pipeline_create_links(struct pipeline *pl)
 {
 	for (int i = 0; i < pl->config->n_links; i++) {
@@ -86,6 +150,13 @@ static void pipeline_create_links(struct pipeline *pl)
 			fprintf(stderr, "pipeline: malformed link '%s' -> '%s'\n",
 				link.from, link.to);
 			continue;
+		}
+
+		struct a53_node *src_node = pipeline_find_node(pl, from_node);
+		if (src_node) {
+			int type = port_type(src_node, from_port);
+			if (type != AM62D_PORT_AUDIO_PCM && type != AM62D_PORT_AUDIO_SPECTRUM)
+				continue;
 		}
 
 		uint32_t out_node = find_node_id(pl, from_node);
@@ -183,6 +254,8 @@ static void on_core_done(void *data, uint32_t id, int seq)
 			pl->sync_phase = SYNC_PHASE_CREATE_LINKS;
 			break;
 		case SYNC_PHASE_CREATE_LINKS:
+			pipeline_wire_control_links(pl);
+			pipeline_wire_metadata(pl);
 			pipeline_create_links(pl);
 			break;
 		default:
