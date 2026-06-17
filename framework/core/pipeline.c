@@ -5,6 +5,7 @@
 #include <pipewire/pipewire.h>
 
 #include "a53_node.h"
+#include "am62d_plugin.h"
 #include "config.h"
 #include "pipeline.h"
 #include "registry.h"
