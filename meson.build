@@ -16,13 +16,31 @@ executable('am62d-pipeline',
   dependencies: [dependency('libpipewire-0.3'), dl_dep, cjson_dep]
 )
 
+plugin_configs = {
+  'passthrough': { 'sources': ['plugins/passthrough.c'], 'deps': [] },
+}
+
 plugins = get_option('plugins')
 
 foreach plugin : plugins
+  cfg = plugin_configs[plugin]
+
+  skip = false
+  foreach dep : cfg['deps']
+    if not dep.found()
+      warning('Skipping @0@: missing dependency'.format(plugin))
+      skip = true
+      break
+    endif
+  endforeach
+  if skip
+    continue
+  endif
+
   shared_module('am62d_' + plugin,
-    'plugins/' + plugin + '.c',
+    cfg['sources'],
     include_directories: inc,
-    dependencies: [],
+    dependencies: cfg['deps'],
     c_args: ['-fvisibility=hidden'],
     install: true,
     install_dir: '/usr/lib/am62d/plugins',
