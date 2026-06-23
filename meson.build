@@ -19,7 +19,7 @@ executable('am62d-pipeline',
 plugins = get_option('plugins')
 
 foreach plugin : plugins
-  shared_library('am62d_' + plugin,
+  shared_module('am62d_' + plugin,
     'plugins/' + plugin + '.c',
     include_directories: inc,
     dependencies: [],
