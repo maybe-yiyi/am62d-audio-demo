@@ -17,6 +17,7 @@ executable('am62d-pipeline',
   dependencies: [dependency('libpipewire-0.3'), dl_dep, cjson_dep]
 )
 
+webrtc_dep = dependency('webrtc-audio-processing-2', required: false)
 plugin_configs = {
   'passthrough': { 'sources': ['plugins/passthrough.c'], 'deps': [] },
 }
