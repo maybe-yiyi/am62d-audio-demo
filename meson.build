@@ -1,4 +1,5 @@
-project('am62d-pipeline', 'c', default_options: ['c_std=c11'])
+project('am62d-pipeline', ['c', 'cpp'],
+  default_options: ['c_std=c11', 'cpp_std=c++17'])
 
 add_project_arguments('-D_GNU_SOURCE', language: 'c')
 
@@ -42,6 +43,7 @@ foreach plugin : plugins
     include_directories: inc,
     dependencies: cfg['deps'],
     c_args: ['-fvisibility=hidden'],
+    cpp_args: ['-fvisibility=hidden'],
     install: true,
     install_dir: '/usr/lib/am62d/plugins',
   )
