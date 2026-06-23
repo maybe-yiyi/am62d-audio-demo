@@ -20,6 +20,7 @@ executable('am62d-pipeline',
 webrtc_dep = dependency('webrtc-audio-processing-2', required: false)
 plugin_configs = {
   'passthrough': { 'sources': ['plugins/passthrough.c'], 'deps': [] },
+  'webrtc': { 'sources': ['plugins/webrtc.cpp'], 'deps': [webrtc_dep] },
 }
 
 plugins = get_option('plugins')
