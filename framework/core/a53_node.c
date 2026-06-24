@@ -27,14 +27,27 @@
 
 struct discovery_ctx {
 	struct a53_node *node;
-	/* populated per call */
-	enum spa_direction cur_dir;
-	uint32_t cur_port_id;
 	bool got_result;
-	/* audio info from the last result */
 	uint32_t n_channels;
 	bool is_audio;
+	/* port name from the port_info event, indexed by (dir*MAX_PORTS + port_id) */
+	char port_names[2][MAX_PORTS][64];
 };
+
+static void discovery_port_info(void *data, enum spa_direction dir,
+                                 uint32_t port_id,
+                                 const struct spa_port_info *info)
+{
+	struct discovery_ctx *ctx = (struct discovery_ctx *)data;
+	if (dir > 1 || port_id >= MAX_PORTS)
+		return;
+	if (info && info->props) {
+		const char *name = spa_dict_lookup(info->props, "port.name");
+		if (name)
+			snprintf(ctx->port_names[dir][port_id],
+			         sizeof(ctx->port_names[0][0]), "%s", name);
+	}
+}
 
 static void discovery_result(void *data, int seq, int res,
                               uint32_t type, const void *result)
@@ -54,7 +67,6 @@ static void discovery_result(void *data, int seq, int res,
 	ctx->is_audio = false;
 	ctx->n_channels = 1;
 
-	/* Try to parse as audio format */
 	uint32_t media_type = 0, media_subtype = 0;
 	if (spa_format_parse(r->param, &media_type, &media_subtype) >= 0 &&
 	    media_type == SPA_MEDIA_TYPE_audio &&
@@ -64,12 +76,12 @@ static void discovery_result(void *data, int seq, int res,
 		ctx->is_audio = true;
 		ctx->n_channels = info.channels ? info.channels : 1;
 	}
-	/* If not audio format, treat as control (IO param) - is_audio stays false */
 }
 
 static const struct spa_node_events discovery_events = {
 	SPA_VERSION_NODE_EVENTS,
-	.result = discovery_result,
+	.port_info = discovery_port_info,
+	.result    = discovery_result,
 };
 
 /* -------------------------------------------------------------------------
@@ -263,6 +275,12 @@ struct a53_node *a53_node_create(struct pw_core *core,
 					         "32 bit %u channel audio",
 					         p->n_channels);
 
+				const char *port_name =
+					dctx.port_names[dir][port_id];
+				if (port_name[0] == '\0')
+					port_name = (dir == SPA_DIRECTION_INPUT
+					             ? "input" : "output");
+
 				p->pw_port = (struct port_data *)pw_filter_add_port(
 					node->filter,
 					(enum pw_direction)dir,
@@ -270,9 +288,7 @@ struct a53_node *a53_node_create(struct pw_core *core,
 					sizeof(struct port_data),
 					pw_properties_new(
 						PW_KEY_FORMAT_DSP, fmt,
-						PW_KEY_PORT_NAME,
-						  (dir == SPA_DIRECTION_INPUT
-						   ? "input" : "output"),
+						PW_KEY_PORT_NAME, port_name,
 						NULL),
 					NULL, 0);
 

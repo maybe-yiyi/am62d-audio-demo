@@ -201,7 +201,24 @@ static int am62d_node_add_listener_##factory_id(void *object, \
                                                  void *data) \
 { \
 	struct am62d_impl_##factory_id *impl = (struct am62d_impl_##factory_id *)object; \
-	spa_hook_list_append(&impl->hooks, listener, events, data); \
+	struct spa_hook_list save; \
+	spa_hook_list_isolate(&impl->hooks, &save, listener, events, data); \
+	\
+	for (uint32_t i = 0; i < impl->n_ports; i++) { \
+		const struct am62d_port_desc *desc = &impl->port_descs[i]; \
+		struct spa_dict_item items[1] = { \
+			SPA_DICT_ITEM_INIT("port.name", desc->name), \
+		}; \
+		struct spa_dict props = SPA_DICT_INIT(items, 1); \
+		struct spa_port_info info = SPA_PORT_INFO_INIT(); \
+		info.change_mask = SPA_PORT_CHANGE_MASK_PROPS; \
+		info.props = &props; \
+		spa_node_emit_port_info(&impl->hooks, \
+			desc->dir == AM62D_DIR_IN ? SPA_DIRECTION_INPUT : SPA_DIRECTION_OUTPUT, \
+			i, &info); \
+	} \
+	\
+	spa_hook_list_join(&impl->hooks, &save); \
 	return 0; \
 } \
 \
