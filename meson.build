@@ -11,16 +11,23 @@ subdir('third_party/cjson')
 cc = meson.get_compiler('c')
 dl_dep = cc.find_library('dl', required: false)
 
+# Try pkg-config first, fall back to local PipeWire source
+spa_dep = dependency('spa-0.2', required: false)
+if not spa_dep.found()
+  spa_inc = include_directories('/home/a1264029/pipe/spa/include')
+  spa_dep = declare_dependency(include_directories: spa_inc)
+endif
+
 executable('am62d-pipeline',
   framework_src,
   include_directories: inc,
-  dependencies: [dependency('libpipewire-0.3'), dl_dep, cjson_dep]
+  dependencies: [dependency('libpipewire-0.3'), dl_dep, cjson_dep, spa_dep]
 )
 
 webrtc_dep = dependency('webrtc-audio-processing-2', required: false)
 plugin_configs = {
-  'passthrough': { 'sources': ['plugins/passthrough.c'], 'deps': [] },
-  'webrtc': { 'sources': ['plugins/webrtc.cpp'], 'deps': [webrtc_dep] },
+  'passthrough': { 'sources': ['plugins/passthrough.c'], 'deps': [spa_dep] },
+  'webrtc': { 'sources': ['plugins/webrtc.cpp'], 'deps': [webrtc_dep, spa_dep] },
 }
 
 plugins = get_option('plugins')
