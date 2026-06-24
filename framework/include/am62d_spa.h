@@ -8,12 +8,10 @@
 #include <spa/node/utils.h>
 #include <spa/param/param.h>
 #include <spa/param/audio/raw.h>
-#include <spa/param/audio/raw-utils.h>
 #include <spa/param/audio/format-utils.h>
 #include <spa/pod/builder.h>
 #include <spa/pod/parser.h>
 #include <spa/pod/iter.h>
-#include <spa/pod/body.h>
 #include <spa/utils/hook.h>
 #include <spa/utils/type.h>
 #include <spa/utils/string.h>
@@ -65,7 +63,7 @@ static inline int am62d_params_encode(uint8_t *buf, size_t buf_size,
 	spa_pod_builder_pop(&b, &f_obj);
 	spa_pod_builder_pop(&b, &f_seq);
 
-	if (spa_pod_builder_corrupted(&b))
+	if (b.state.offset > b.size)
 		return -ENOSPC;
 
 	return (int)b.state.offset;
