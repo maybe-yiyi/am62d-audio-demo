@@ -1,5 +1,4 @@
 option('plugins',
   type: 'array',
-  choices: ['passthrough'],
-  value: ['passthrough'],
+  value: ['passthrough', 'webrtc'],
   description: 'Plugins to build')

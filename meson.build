@@ -1,4 +1,5 @@
-project('am62d-pipeline', 'c', default_options: ['c_std=c11'])
+project('am62d-pipeline', ['c', 'cpp'],
+  default_options: ['c_std=c11', 'cpp_std=c++17'])
 
 add_project_arguments('-D_GNU_SOURCE', language: 'c')
 
@@ -16,14 +17,35 @@ executable('am62d-pipeline',
   dependencies: [dependency('libpipewire-0.3'), dl_dep, cjson_dep]
 )
 
+webrtc_dep = dependency('webrtc-audio-processing-2', required: false)
+plugin_configs = {
+  'passthrough': { 'sources': ['plugins/passthrough.c'], 'deps': [] },
+  'webrtc': { 'sources': ['plugins/webrtc.cpp'], 'deps': [webrtc_dep] },
+}
+
 plugins = get_option('plugins')
 
 foreach plugin : plugins
-  shared_library('am62d_' + plugin,
-    'plugins/' + plugin + '.c',
+  cfg = plugin_configs[plugin]
+
+  skip = false
+  foreach dep : cfg['deps']
+    if not dep.found()
+      warning('Skipping @0@: missing dependency'.format(plugin))
+      skip = true
+      break
+    endif
+  endforeach
+  if skip
+    continue
+  endif
+
+  shared_module('am62d_' + plugin,
+    cfg['sources'],
     include_directories: inc,
-    dependencies: [cjson_dep],
+    dependencies: cfg['deps'],
     c_args: ['-fvisibility=hidden'],
+    cpp_args: ['-fvisibility=hidden'],
     install: true,
     install_dir: '/usr/lib/am62d/plugins',
   )

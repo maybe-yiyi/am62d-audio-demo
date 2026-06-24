@@ -1,0 +1,12 @@
+{
+  "name": "demo",
+  "nodes": [
+    { "id": "webrtc", "plugin": "webrtc", "config": { "level": 3 } }
+  ],
+  "links": [
+    { "from": "alsa_input.pci-0000_00_1f.3.analog-stereo:capture_FL", "to": "webrtc:audio_in_l" },
+    { "from": "alsa_input.pci-0000_00_1f.3.analog-stereo:capture_FR", "to": "webrtc:audio_in_r" },
+    { "from": "webrtc:audio_out_l", "to": "alsa_output.pci-0000_00_1f.3.analog-stereo:playback_FL" },
+    { "from": "webrtc:audio_out_r", "to": "alsa_output.pci-0000_00_1f.3.analog-stereo:playback_FR" }
+  ]
+}
