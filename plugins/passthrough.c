@@ -37,6 +37,6 @@ static const struct am62d_port_desc ports[] = {
 	{ "out_r", AM62D_PORT_AUDIO_PCM, AM62D_DIR_OUT, { .pcm = { 1 } } },
 };
 
-AM62D_SPA_PLUGIN_DEFINE(am62d_passthrough, ports, 4,
+AM62D_SPA_PLUGIN_DEFINE(am62d_passthrough, "passthrough", ports, 4,
                          plugin_init, plugin_destroy, plugin_process,
                          AM62D_EXEC_A53);

@@ -152,7 +152,7 @@ static const struct am62d_port_desc ports[] = {
 };
 
 extern "C" {
-AM62D_SPA_PLUGIN_DEFINE(am62d_webrtc, ports, 4,
+AM62D_SPA_PLUGIN_DEFINE(am62d_webrtc, "webrtc", ports, 4,
                          plugin_init, plugin_destroy, plugin_process,
                          AM62D_EXEC_A53);
 }

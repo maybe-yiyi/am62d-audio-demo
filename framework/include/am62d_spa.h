@@ -131,7 +131,7 @@ static inline int am62d_params_decode(const struct spa_io_sequence *seq,
 	return n;
 }
 
-#define AM62D_SPA_PLUGIN_DEFINE(factory_id, ports_array, ports_count, \
+#define AM62D_SPA_PLUGIN_DEFINE(factory_id, factory_name_str, ports_array, ports_count, \
                                  init_callback, destroy_callback, process_callback, \
                                  executor_type) \
 \
@@ -461,7 +461,7 @@ static int am62d_enum_interface_info_##factory_id(const struct spa_handle_factor
 \
 static const struct spa_handle_factory am62d_factory_##factory_id = { \
 	SPA_VERSION_HANDLE_FACTORY, \
-	.name = #factory_id, \
+	.name = factory_name_str, \
 	.get_size = am62d_get_size_##factory_id, \
 	.init = am62d_factory_init_##factory_id, \
 	.enum_interface_info = am62d_enum_interface_info_##factory_id, \
