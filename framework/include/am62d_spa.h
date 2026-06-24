@@ -170,9 +170,9 @@ static int am62d_node_set_param_##factory_id(void *object, uint32_t id, uint32_t
 \
 static int am62d_node_set_io_##factory_id(void *object, uint32_t id, void *data, size_t size) \
 { \
-	struct am62d_impl_##factory_id *impl = object; \
+	struct am62d_impl_##factory_id *impl = (struct am62d_impl_##factory_id *)object; \
 	if (id == SPA_IO_Position) { \
-		impl->position = data; \
+		impl->position = (struct spa_io_position *)data; \
 		return 0; \
 	} \
 	return -ENOENT; \
@@ -180,7 +180,7 @@ static int am62d_node_set_io_##factory_id(void *object, uint32_t id, void *data,
 \
 static int am62d_node_send_command_##factory_id(void *object, const struct spa_command *command) \
 { \
-	struct am62d_impl_##factory_id *impl = object; \
+	struct am62d_impl_##factory_id *impl = (struct am62d_impl_##factory_id *)object; \
 	switch (SPA_NODE_COMMAND_ID(command)) { \
 	case SPA_NODE_COMMAND_Start: \
 		impl->started = true; \
@@ -200,7 +200,7 @@ static int am62d_node_add_listener_##factory_id(void *object, \
                                                  const struct spa_node_events *events, \
                                                  void *data) \
 { \
-	struct am62d_impl_##factory_id *impl = object; \
+	struct am62d_impl_##factory_id *impl = (struct am62d_impl_##factory_id *)object; \
 	spa_hook_list_append(&impl->hooks, listener, events, data); \
 	return 0; \
 } \
@@ -229,7 +229,7 @@ static int am62d_node_port_enum_params_##factory_id(void *object, int seq, \
                                                      uint32_t id, uint32_t start, uint32_t num, \
                                                      const struct spa_pod *filter) \
 { \
-	struct am62d_impl_##factory_id *impl = object; \
+	struct am62d_impl_##factory_id *impl = (struct am62d_impl_##factory_id *)object; \
 	uint8_t buffer[512]; \
 	struct spa_pod_builder b; \
 	struct spa_pod *param; \
@@ -256,7 +256,7 @@ static int am62d_node_port_enum_params_##factory_id(void *object, int seq, \
 		spa_pod_builder_push_object(&b, &f, SPA_TYPE_OBJECT_ParamIO, id); \
 		spa_pod_builder_prop(&b, SPA_PARAM_IO_id, 0); \
 		spa_pod_builder_id(&b, desc->dir == AM62D_DIR_IN ? SPA_IO_Control : SPA_IO_Notify); \
-		param = spa_pod_builder_pop(&b, &f); \
+		param = (struct spa_pod *)spa_pod_builder_pop(&b, &f); \
 	} else { \
 		return 0; \
 	} \
@@ -283,10 +283,10 @@ static int am62d_node_port_use_buffers_##factory_id(void *object, \
                                                      uint32_t flags, \
                                                      struct spa_buffer **buffers, uint32_t n_buffers) \
 { \
-	struct am62d_impl_##factory_id *impl = object; \
+	struct am62d_impl_##factory_id *impl = (struct am62d_impl_##factory_id *)object; \
 	if (port_id >= impl->n_ports) \
 		return -EINVAL; \
-	impl->buf[port_id] = (n_buffers > 0 && buffers[0]) ? buffers[0]->datas[0].data : NULL; \
+	impl->buf[port_id] = (n_buffers > 0 && buffers[0]) ? (float *)buffers[0]->datas[0].data : NULL; \
 	return 0; \
 } \
 \
@@ -294,19 +294,19 @@ static int am62d_node_port_set_io_##factory_id(void *object, \
                                                 enum spa_direction direction, uint32_t port_id, \
                                                 uint32_t id, void *data, size_t size) \
 { \
-	struct am62d_impl_##factory_id *impl = object; \
+	struct am62d_impl_##factory_id *impl = (struct am62d_impl_##factory_id *)object; \
 	if (port_id >= impl->n_ports) \
 		return -EINVAL; \
 	const struct am62d_port_desc *desc = &impl->port_descs[port_id]; \
 	if (id == SPA_IO_Buffers && \
 	    (desc->type == AM62D_PORT_AUDIO_PCM || desc->type == AM62D_PORT_AUDIO_SPECTRUM)) { \
-		impl->io[port_id] = data; \
+		impl->io[port_id] = (struct spa_io_buffers *)data; \
 	} else if (id == SPA_IO_Control && desc->type == AM62D_PORT_CONTROL && \
 	           desc->dir == AM62D_DIR_IN) { \
-		impl->control_in = data; \
+		impl->control_in = (struct spa_io_sequence *)data; \
 	} else if (id == SPA_IO_Notify && desc->type == AM62D_PORT_CONTROL && \
 	           desc->dir == AM62D_DIR_OUT) { \
-		impl->notify_out = data; \
+		impl->notify_out = (struct spa_io_sequence *)data; \
 	} else { \
 		return -ENOENT; \
 	} \
@@ -320,7 +320,7 @@ static int am62d_node_port_reuse_buffer_##factory_id(void *object, uint32_t port
 \
 static int am62d_node_process_##factory_id(void *object) \
 { \
-	struct am62d_impl_##factory_id *impl = object; \
+	struct am62d_impl_##factory_id *impl = (struct am62d_impl_##factory_id *)object; \
 	if (!impl->started) \
 		return SPA_STATUS_OK; \
 	\
@@ -438,7 +438,7 @@ static int am62d_factory_init_##factory_id(const struct spa_handle_factory *fact
 	\
 	for (uint32_t i = 0; i < n_support; i++) { \
 		if (spa_streq(support[i].type, SPA_TYPE_INTERFACE_Log)) \
-			impl->log = support[i].data; \
+			impl->log = (struct spa_log *)support[i].data; \
 	} \
 	\
 	spa_hook_list_init(&impl->hooks); \

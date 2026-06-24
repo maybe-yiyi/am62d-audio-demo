@@ -3,6 +3,7 @@
 
 extern "C" {
 #include "am62d_plugin.h"
+#include "am62d_spa.h"
 }
 
 #include <modules/audio_processing/include/audio_processing.h>
@@ -27,14 +28,10 @@ struct priv {
 static NSLevel map_level(int v)
 {
 	switch(v) {
-	case 0:
-		return NSLevel::kLow; 
-	case 2:
-		return NSLevel::kHigh;
-	case 3:
-		return NSLevel::kVeryHigh;
-	default:
-		return NSLevel::kModerate;
+	case 0:  return NSLevel::kLow;
+	case 2:  return NSLevel::kHigh;
+	case 3:  return NSLevel::kVeryHigh;
+	default: return NSLevel::kModerate;
 	}
 }
 
@@ -58,15 +55,12 @@ static rtc::scoped_refptr<webrtc::AudioProcessing> make_apm(NSLevel level)
 
 	apm_cfg.noise_suppression.enabled = true;
 	apm_cfg.noise_suppression.level = level;
-	
+
 	apm_cfg.high_pass_filter.enabled = true;
-
 	apm_cfg.transient_suppression.enabled = true;
-
 	apm_cfg.pipeline.multi_channel_capture = true;
 
 	apm->ApplyConfig(apm_cfg);
-
 	return apm;
 }
 
@@ -79,11 +73,9 @@ static int plugin_init(void **out_priv,
 			strcmp(params[i].key, "level") == 0)
 			level_int = params[i].v.i;
 	}
-	printf("Set NS level to %d\n", level_int);
 
 	struct priv *p = new priv;
-	NSLevel level = map_level(level_int);
-	p->apm = make_apm(level);
+	p->apm = make_apm(map_level(level_int));
 	if (!p->apm) {
 		delete p;
 		return -1;
@@ -99,16 +91,16 @@ static int plugin_init(void **out_priv,
 
 static int plugin_process(void *priv,
 			const float **in, float **out, uint32_t n_frames,
-			struct am62d_data_buf *const *in_meta,
-			struct am62d_data_buf **out_meta,
-			float *out_ctrl)
+			const struct am62d_param *in_params, int n_in_params,
+			struct am62d_param *out_params, int *n_out_params)
 {
-	(void)in_meta; (void)out_meta; (void)out_ctrl;
+	(void)in_params; (void)n_in_params;
+	*n_out_params = 0;
 
 	struct priv *p = static_cast<struct priv *>(priv);
 
 	if (!in[0] || !out[0] || !in[1] || !out[1])
-		return 1;
+		return 0;
 
 	uint32_t consumed = 0;
 	uint32_t produced = 0;
@@ -147,34 +139,20 @@ static int plugin_process(void *priv,
 	return 0;
 }
 
-static int plugin_set_control(void *priv, const char *key, float value)
-{
-	(void)priv; (void)key; (void)value;
-	return 0;
-}
-
 static void plugin_destroy(void *priv)
 {
 	delete static_cast<struct priv *>(priv);
 }
 
 static const struct am62d_port_desc ports[] = {
-	{ "audio_in_l", AM62D_PORT_AUDIO_PCM, AM62D_DIR_IN, {{1}} },
-	{ "audio_in_r", AM62D_PORT_AUDIO_PCM, AM62D_DIR_IN, {{1}} },
-	{ "audio_out_l", AM62D_PORT_AUDIO_PCM, AM62D_DIR_OUT, {{1}} },
-	{ "audio_out_r", AM62D_PORT_AUDIO_PCM, AM62D_DIR_OUT, {{1}} },
+	{ "audio_in_l",  AM62D_PORT_AUDIO_PCM, AM62D_DIR_IN,  { .pcm = { 1 } } },
+	{ "audio_in_r",  AM62D_PORT_AUDIO_PCM, AM62D_DIR_IN,  { .pcm = { 1 } } },
+	{ "audio_out_l", AM62D_PORT_AUDIO_PCM, AM62D_DIR_OUT, { .pcm = { 1 } } },
+	{ "audio_out_r", AM62D_PORT_AUDIO_PCM, AM62D_DIR_OUT, { .pcm = { 1 } } },
 };
 
-extern "C" AM62D_PLUGIN_EXPORT const struct am62d_plugin AM62D_PLUGIN_ENTRY = {
-	.abi_magic = AM62D_ABI_MAGIC,
-	.abi_major = AM62D_ABI_MAJOR,
-	.abi_minor = AM62D_ABI_MINOR,
-	.name = "webrtc",
-	.executor = AM62D_EXEC_A53,
-	.ports = ports,
-	.n_ports = sizeof(ports) / sizeof(ports[0]),
-	.init = plugin_init,
-	.destroy = plugin_destroy,
-	.process = plugin_process,
-	.set_control = plugin_set_control,
-};
+extern "C" {
+AM62D_SPA_PLUGIN_DEFINE(am62d_webrtc, ports, 4,
+                         plugin_init, plugin_destroy, plugin_process,
+                         AM62D_EXEC_A53);
+}
