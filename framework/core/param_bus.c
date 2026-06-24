@@ -32,7 +32,7 @@ void param_bus_dispatch(struct a53_node *node)
 
 		/* Decode all params from src notify_out */
 		struct am62d_param src_params[AM62D_MAX_PARAMS];
-		int n_src = am62d_params_decode(&node->notify_out, src_params, AM62D_MAX_PARAMS);
+		int n_src = am62d_params_decode(node->notify_out, src_params, AM62D_MAX_PARAMS);
 		if (n_src <= 0)
 			continue;
 
@@ -45,10 +45,12 @@ void param_bus_dispatch(struct a53_node *node)
 			struct am62d_param dst_param = src_params[j];
 			dst_param.key = r->dst_param;
 
-			uint8_t buf[512];
-			int enc_size = am62d_params_encode(buf, sizeof(buf), &dst_param, 1);
-			if (enc_size > 0)
-				memcpy(&r->dst->control_in, buf, enc_size);
+			if (r->dst->control_in) {
+				uint8_t buf[512];
+				int enc_size = am62d_params_encode(buf, sizeof(buf), &dst_param, 1);
+				if (enc_size > 0)
+					memcpy(r->dst->control_in, buf, enc_size);
+			}
 
 			break;
 		}
