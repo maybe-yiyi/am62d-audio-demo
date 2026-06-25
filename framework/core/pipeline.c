@@ -7,7 +7,6 @@
 #include "a53_node.h"
 #include "am62d_plugin.h"
 #include "config.h"
-#include "param_bus.h"
 #include "pipeline.h"
 #include "registry.h"
 
@@ -70,36 +69,6 @@ static int meta_idx(const struct a53_node *node, const char *port_name,
 		idx++;
 	}
 	return -1;
-}
-
-static void pipeline_wire_control_links(struct pipeline *pl)
-{
-	for (int i = 0; i < pl->config->n_ctrl_links; i++) {
-		const struct control_link_config *clc = &pl->config->ctrl_links[i];
-
-		char src_node_id[64];
-		char src_port_name[64];
-		if (sscanf(clc->from, "%63[^:]:%63s", src_node_id, src_port_name) != 2) {
-			fprintf(stderr, "pipeline: malformed control link 'from': %s\n",
-				clc->from);
-			continue;
-		}
-
-		struct a53_node *src = pipeline_find_node(pl, src_node_id);
-		struct a53_node *dst = pipeline_find_node(pl, clc->to);
-		if (!src || !dst) {
-			fprintf(stderr, "pipeline: control link failed: %s -> %s\n",
-				clc->from, clc->to);
-			continue;
-		}
-
-		if (param_bus_register(src, src_port_name, dst, clc->param) < 0) {
-			fprintf(stderr, "pipeline: control link failed: %s -> %s.%s\n",
-				clc->from, clc->to, clc->param);
-			continue;
-		}
-		printf("Registered control %s -> %s.%s\n", clc->from, clc->to, clc->param);
-	}
 }
 
 static void pipeline_wire_metadata(struct pipeline *pl)
@@ -254,7 +223,6 @@ static void on_core_done(void *data, uint32_t id, int seq)
 			pl->sync_phase = SYNC_PHASE_CREATE_LINKS;
 			break;
 		case SYNC_PHASE_CREATE_LINKS:
-			pipeline_wire_control_links(pl);
 			pipeline_wire_metadata(pl);
 			pipeline_create_links(pl);
 			break;

@@ -4,7 +4,6 @@
 
 #include "a53_node.h"
 #include "cJSON.h"
-#include "param_bus.h"
 
 static enum pw_direction to_pw_direction(enum am62d_port_dir dir)
 {
@@ -35,8 +34,6 @@ static void on_process(void *data, struct spa_io_position *pos)
 			(struct am62d_data_buf *const *)node->meta_in,
 			node->meta_out,
 			node->ctrl_out_vals);
-
-	param_bus_dispatch(node);
 }
 
 static const struct pw_filter_events filter_events = {
