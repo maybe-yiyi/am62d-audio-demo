@@ -3,7 +3,6 @@
 
 #include <pipewire/pipewire.h>
 
-#include "a53_node.h"
 #include "config.h"
 
 #define MAX_NODE_PORTS 64
@@ -36,16 +35,13 @@ struct pipeline {
 
 	struct pipeline_config *config;
 
-	struct a53_node *nodes[MAX_NODES];
-	int n_nodes;
-
 	struct node_id_entry node_ids[MAX_NODES];
 	int n_node_ids;
 	struct port_id_entry port_ids[MAX_NODE_PORTS];
 	int n_port_ids;
 };
 
-struct pipeline *pipeline_create(const char *config_path, const char *plugin_dir);
+struct pipeline *pipeline_create(const char *config_path);
 void pipeline_run(struct pipeline *pl);
 void pipeline_destroy(struct pipeline *pl);
 
