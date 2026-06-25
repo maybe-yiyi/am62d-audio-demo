@@ -74,65 +74,38 @@ struct a53_node *a53_node_create(struct pw_core *core,
 	for (int i = 0; i < plugin->n_ports; i++) {
 		const struct am62d_port_desc *desc = &plugin->ports[i];
 
-		switch (desc->type) {
-		case AM62D_PORT_METADATA:
-			if (desc->dir != AM62D_DIR_OUT) {
-				if (node->n_meta_in >= MAX_PORTS)
-					goto destroy_filter;
-				node->n_meta_in++;
-				break;
-			}
+		if (desc->type == AM62D_PORT_METADATA ||
+			desc->type == AM62D_PORT_CONTROL)
+			continue;
 
-			if (node->n_meta_out >= MAX_PORTS)
-				goto destroy_filter;
+		char dsp_format[64];
+		uint32_t ch = desc->u.pcm.n_channels;
+		if (ch == 1)
+			snprintf(dsp_format, sizeof(dsp_format), "32 bit float mono audio");
+		else
+			snprintf(dsp_format, sizeof(dsp_format), "32 bit %u channel audio", ch);
 
-			size_t sz = sizeof(struct am62d_data_buf) + desc->u.meta.payload_size;
+		struct port_data *pd = pw_filter_add_port(node->filter,
+				to_pw_direction(desc->dir),
+				PW_FILTER_PORT_FLAG_MAP_BUFFERS,
+				sizeof(struct port_data),
+				pw_properties_new(
+					PW_KEY_FORMAT_DSP, dsp_format,
+					PW_KEY_PORT_NAME, desc->name,
+					NULL),
+				NULL, 0);
+		if (!pd)
+			goto destroy_filter;
 
-			struct am62d_data_buf *buf = calloc(1, sz);
-			if (!buf)
-				goto destroy_filter;
-			buf->type_tag     = desc->u.meta.type_tag;
-			buf->payload_size = desc->u.meta.payload_size;
+		struct port_data **port_arr = (desc->dir == AM62D_DIR_IN)
+			? node->in_ports : node->out_ports;
+		int *n = (desc->dir == AM62D_DIR_IN) ? &node->n_in : &node->n_out;
 
-			node->meta_out[node->n_meta_out++] = buf;
-			break;
-		case AM62D_PORT_CONTROL:
-			if (desc->dir == AM62D_DIR_OUT) {
-				if (node->n_ctrl_out >= MAX_PORTS)
-					goto destroy_filter;
-				node->n_ctrl_out++;
-			}
-			break;
-		default:
-			char dsp_format[64];
-			uint32_t ch = desc->u.pcm.n_channels;
-			if (ch == 1)
-				snprintf(dsp_format, sizeof(dsp_format), "32 bit float mono audio");
-			else
-				snprintf(dsp_format, sizeof(dsp_format), "32 bit %u channel audio", ch);
+		if (*n >= MAX_PORTS)
+			goto destroy_filter;
 
-			struct port_data *pd = pw_filter_add_port(node->filter,
-					to_pw_direction(desc->dir),
-					PW_FILTER_PORT_FLAG_MAP_BUFFERS,
-					sizeof(struct port_data),
-					pw_properties_new(
-						PW_KEY_FORMAT_DSP, dsp_format,
-						PW_KEY_PORT_NAME, desc->name,
-						NULL),
-					NULL, 0);
-			if (!pd)
-				goto destroy_filter;
-
-			struct port_data **port_arr = (desc->dir == AM62D_DIR_IN)
-				? node->in_ports : node->out_ports;
-			int *n = (desc->dir == AM62D_DIR_IN) ? &node->n_in : &node->n_out;
-
-			if (*n >= MAX_PORTS)
-				goto destroy_filter;
-
-			port_arr[*n] = pd;
-			(*n)++;
-		}
+		port_arr[*n] = pd;
+		(*n)++;
 	}
 
 	ret = pw_filter_connect(node->filter,
@@ -144,9 +117,6 @@ struct a53_node *a53_node_create(struct pw_core *core,
 	return node;
 
 destroy_filter:
-	for (int i = 0; i < node->n_meta_out; i++)
-		free(node->meta_out[i]);
-
 	pw_filter_destroy(node->filter);
 destroy_plugin:
 	plugin->destroy(node->priv);
@@ -158,9 +128,6 @@ exit:
 
 void a53_node_destroy(struct a53_node *node)
 {
-	for (int i = 0; i < node->n_meta_out; i++)
-		free(node->meta_out[i]);
-
 	pw_filter_destroy(node->filter);
 	node->plugin->destroy(node->priv);
 	free(node);
