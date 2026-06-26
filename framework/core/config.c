@@ -31,7 +31,45 @@ static struct cJSON *conf_fread(const char *path)
 	return config;
 }
 
-static int parse_nodes(struct cJSON *nodes, struct node_config *out, int *count)
+static int parse_io_array(struct cJSON *arr, struct io_config *out, int *count)
+{
+	struct cJSON *item;
+	cJSON_ArrayForEach(item, arr) {
+		struct io_config *c = &out[*count];
+
+		struct cJSON *id = cJSON_GetObjectItemCaseSensitive(item, "id");
+		if (!cJSON_IsString(id)) {
+			fprintf(stderr, "config: io node missing 'id'\n");
+			return -1;
+		}
+		snprintf(c->id, sizeof(c->id), "%s", id->valuestring);
+
+		struct cJSON *driver = cJSON_GetObjectItemCaseSensitive(item, "driver");
+		if (!cJSON_IsString(driver)) {
+			fprintf(stderr, "config: io node '%s' missing 'driver'\n", c->id);
+			return -1;
+		}
+		snprintf(c->driver, sizeof(c->driver), "%s", driver->valuestring);
+
+		struct cJSON *device = cJSON_GetObjectItemCaseSensitive(item, "device");
+		if (!cJSON_IsString(device)) {
+			fprintf(stderr, "config: io node '%s' missing 'device'\n", c->id);
+			return -1;
+		}
+		snprintf(c->device, sizeof(c->device), "%s", device->valuestring);
+
+		struct cJSON *channels = cJSON_GetObjectItemCaseSensitive(item, "channels");
+		c->channels = cJSON_IsNumber(channels) ? (uint32_t)channels->valueint : 2;
+
+		struct cJSON *rate = cJSON_GetObjectItemCaseSensitive(item, "rate");
+		c->rate = cJSON_IsNumber(rate) ? (uint32_t)rate->valueint : 48000;
+
+		(*count)++;
+	}
+	return 0;
+}
+
+static int parse_plugins(struct cJSON *nodes, struct node_config *out, int *count)
 {
 	struct cJSON *node;
 	cJSON_ArrayForEach(node, nodes) {
@@ -60,6 +98,10 @@ static int parse_nodes(struct cJSON *nodes, struct node_config *out, int *count)
 			fprintf(stderr, "config: node 'plugin' field missing or malformed\n");
 			return -1;
 		}
+
+		struct cJSON *plugin_path = cJSON_GetObjectItemCaseSensitive(node, "plugin_path");
+		if (cJSON_IsString(plugin_path))
+			snprintf(out[*count].plugin_path, sizeof(out[0].plugin_path), "%s", plugin_path->valuestring);
 
 		struct cJSON *params = cJSON_GetObjectItemCaseSensitive(node, "config");
 		if (params) {
@@ -90,9 +132,6 @@ static int parse_nodes(struct cJSON *nodes, struct node_config *out, int *count)
 				}
 				out[*count].n_params++;
 			}
-		} else {
-			fprintf(stderr, "config: node 'config' field missing or malformed\n");
-			return -1;
 		}
 
 		(*count)++;
@@ -204,8 +243,16 @@ struct pipeline_config *config_load(const char *path)
 		fprintf(stderr, "config: 'name' missing or malformed\n");
 	}
 
-	if (parse_nodes(cJSON_GetObjectItemCaseSensitive(conf->json, "nodes"),
-			conf->nodes, &conf->n_nodes) < 0)
+	if (parse_io_array(cJSON_GetObjectItemCaseSensitive(conf->json, "sources"),
+			conf->sources, &conf->n_sources) < 0)
+		goto cleanup_json;
+
+	if (parse_io_array(cJSON_GetObjectItemCaseSensitive(conf->json, "sinks"),
+			conf->sinks, &conf->n_sinks) < 0)
+		goto cleanup_json;
+
+	if (parse_plugins(cJSON_GetObjectItemCaseSensitive(conf->json, "plugins"),
+			conf->plugins, &conf->n_plugins) < 0)
 		goto cleanup_json;
 
 	if (parse_links(cJSON_GetObjectItemCaseSensitive(conf->json, "links"),

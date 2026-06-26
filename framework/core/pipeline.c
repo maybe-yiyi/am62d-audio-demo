@@ -169,8 +169,8 @@ struct pipeline *pipeline_create(const char *config_path)
 	pl->config = config_load(config_path);
 	printf("Loading configuration %s\n", pl->config->name);
 
-	for (int i = 0; i < pl->config->n_nodes; i++) {
-		const struct node_config *nc = &pl->config->nodes[i];
+	for (int i = 0; i < pl->config->n_plugins; i++) {
+		const struct node_config *nc = &pl->config->plugins[i];
 		printf("Creating node %s\n", nc->id);
 
 		pw_core_create_object(pl->core, "adapter",
