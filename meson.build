@@ -5,18 +5,23 @@ add_project_arguments('-D_GNU_SOURCE', language: 'c')
 
 inc = include_directories('framework/include')
 
-subdir('framework/core')
-subdir('third_party/cjson')
-
 cc = meson.get_compiler('c')
 dl_dep = cc.find_library('dl', required: false)
 
+pthread_dep = dependency('threads')
+
 spa_dep = dependency('libspa-0.2')
+spa_plugin_dir = spa_dep.get_variable(pkgconfig: 'plugindir')
+add_project_arguments('-DSPA_PLUGIN_DIR="' + spa_plugin_dir + '"', language: 'c')
+add_project_arguments('-DSPA_PLUGIN_DIR="' + spa_plugin_dir + '"', language: 'cpp')
+
+subdir('framework/core')
+subdir('third_party/cjson')
 
 executable('am62d-pipeline',
   framework_src,
   include_directories: inc,
-  dependencies: [dependency('libpipewire-0.3'), dl_dep, cjson_dep, spa_dep]
+  dependencies: [dependency('libpipewire-0.3'), dl_dep, cjson_dep, spa_dep, pthread_dep]
 )
 
 webrtc_dep = dependency('webrtc-audio-processing-2', required: false)
