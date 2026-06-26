@@ -3,4 +3,5 @@ framework_src = files(
   'config.c',
   'main.c',
   'dataloop.c',
+  'driver.c',
 )
