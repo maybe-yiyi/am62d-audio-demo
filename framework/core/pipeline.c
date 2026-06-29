@@ -1,222 +1,318 @@
+#include <errno.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
-#include <pipewire/pipewire.h>
+#include <spa/node/node.h>
+#include <spa/node/io.h>
+#include <spa/utils/dict.h>
 
 #include "config.h"
+#include "dataloop.h"
+#include "driver.h"
 #include "pipeline.h"
+#include "plugin.h"
 
-struct pipeline *pipewire_setup()
+static int ready_cb(void *data, int status)
 {
-	struct pipeline *pl = calloc(1, sizeof(struct pipeline));
+	struct pipeline *pl = data;
+	(void)status;
 
-	pw_init(NULL, NULL);
+	for (int i = 0; i < pl->n_sources; i++)
+		spa_node_process(pl->sources[i]->node);
+	for (int i = 0; i < pl->n_nodes; i++)
+		spa_node_process(pl->nodes[i]->node);
+	for (int i = 0; i < pl->n_sinks; i++)
+		spa_node_process(pl->sinks[i]->node);
 
-	pl->loop = pw_main_loop_new(NULL);
-	pl->context = pw_context_new(pw_main_loop_get_loop(pl->loop), NULL, 0);
-	pl->core = pw_context_connect(pl->context, NULL, 0);
-
-	return pl;
+	return 0;
 }
 
-static uint32_t find_node_id(struct pipeline *pl, const char *config_id)
+static const struct spa_node_callbacks source_cbs = {
+	SPA_VERSION_NODE_CALLBACKS,
+	.ready = ready_cb,
+};
+
+static struct spa_node_wrapper *find_node_by_id(const struct pipeline *pl, const char *id)
 {
-	for (int i = 0; i < pl->n_node_ids; i++)
-		if (strcmp(pl->node_ids[i].config_id, config_id) == 0)
-			return pl->node_ids[i].pw_node_id;
-	return SPA_ID_INVALID;
+	for (int i = 0; i < pl->n_sources; i++)
+		if (strcmp(pl->config->sources[i].id, id) == 0) return pl->sources[i];
+	for (int i = 0; i < pl->n_nodes; i++)
+		if (strcmp(pl->config->plugins[i].id, id) == 0) return pl->nodes[i];
+	for (int i = 0; i < pl->n_sinks; i++)
+		if (strcmp(pl->config->sinks[i].id, id) == 0) return pl->sinks[i];
+	return NULL;
 }
 
-static uint32_t find_port_id(struct pipeline *pl, uint32_t pw_node_id, const char *port_name)
-{
-	for (int i = 0; i < pl->n_port_ids; i++)
-		if (pl->port_ids[i].pw_node_id == pw_node_id &&
-			strcmp(pl->port_ids[i].port_name, port_name) == 0)
-			return pl->port_ids[i].pw_port_id;
-	return SPA_ID_INVALID;
-}
-
-static void pipeline_create_links(struct pipeline *pl)
+static void pipeline_wire_buffers(struct pipeline *pl)
 {
 	for (int i = 0; i < pl->config->n_links; i++) {
-		struct link_config link = pl->config->links[i];
+		const struct link_config *lc = &pl->config->links[i];
 
-		char from_node[64];
-		char from_port[64];
-		char to_node[64];
-		char to_port[64];
+		char from_node[64], from_port[64];
+		char to_node[64], to_port[64];
 
-		if (sscanf(link.from, "%63[^:]:%63s", from_node, from_port) != 2 ||
-			sscanf(link.to, "%63[^:]:%63s", to_node, to_port) != 2) {
+		if (sscanf(lc->from, "%63[^:]:%63s", from_node, from_port) != 2 ||
+		    sscanf(lc->to, "%63[^:]:%63s", to_node, to_port) != 2) {
 			fprintf(stderr, "pipeline: malformed link '%s' -> '%s'\n",
-				link.from, link.to);
+				lc->from, lc->to);
 			continue;
 		}
 
-		uint32_t out_node = find_node_id(pl, from_node);
-		uint32_t out_port = find_port_id(pl, out_node, from_port);
-		uint32_t in_node = find_node_id(pl, to_node);
-		uint32_t in_port = find_port_id(pl, in_node, to_port);
+		struct spa_node_wrapper *src = find_node_by_id(pl, from_node);
+		struct spa_node_wrapper *dst = find_node_by_id(pl, to_node);
 
-		if (out_node == SPA_ID_INVALID || out_port == SPA_ID_INVALID ||
-			in_node == SPA_ID_INVALID || in_port == SPA_ID_INVALID) {
-			fprintf(stderr, "pipeline: could not resolve link '%s' -> '%s'\n",
-				link.from, link.to);
+		if (!src || !dst) {
+			fprintf(stderr, "pipeline: link '%s' -> '%s': node not found\n",
+				lc->from, lc->to);
 			continue;
 		}
 
-		char s_out_node[16], s_out_port[16], s_in_node[16], s_in_port[16];
-		snprintf(s_out_node, sizeof(s_out_node), "%u", out_node);
-		snprintf(s_out_port, sizeof(s_out_port), "%u", out_port);
-		snprintf(s_in_node,  sizeof(s_in_node),  "%u", in_node);
-		snprintf(s_in_port,  sizeof(s_in_port),  "%u", in_port);
+		uint32_t src_port = 0, dst_port = 0;
+		sscanf(from_port, "%*[^0-9]%u", &src_port);
+		sscanf(to_port, "%*[^0-9]%u", &dst_port);
 
-		printf("Linking '%s' -> '%s'\n", link.from, link.to);
-		pw_core_create_object(pl->core, "link-factory",
-			PW_TYPE_INTERFACE_Link, PW_VERSION_LINK,
-			&SPA_DICT_INIT_ARRAY(((struct spa_dict_item[4]) {
-				SPA_DICT_ITEM_INIT(PW_KEY_LINK_OUTPUT_NODE, s_out_node),
-				SPA_DICT_ITEM_INIT(PW_KEY_LINK_OUTPUT_PORT, s_out_port),
-				SPA_DICT_ITEM_INIT(PW_KEY_LINK_INPUT_NODE,  s_in_node),
-				SPA_DICT_ITEM_INIT(PW_KEY_LINK_INPUT_PORT,  s_in_port),
-			})),
-			0);
-	}
-}
-
-static void pipeline_record_node_id(struct pipeline *pl, const char *config_id, uint32_t pw_id)
-{
-	if (pl->n_node_ids >= MAX_NODES)
-		return;
-
-	snprintf(pl->node_ids[pl->n_node_ids].config_id,
-		sizeof(pl->node_ids[0].config_id), "%s", config_id);
-
-	pl->node_ids[pl->n_node_ids].pw_node_id = pw_id;
-	pl->n_node_ids++;
-}
-
-static void pipeline_record_port_id(struct pipeline *pl, uint32_t pw_node_id,
-	const char *port_name, uint32_t pw_port_id)
-{
-	if (pl->n_port_ids >= MAX_NODE_PORTS)
-		return;
-
-	snprintf(pl->port_ids[pl->n_port_ids].port_name,
-		sizeof(pl->port_ids[0].port_name), "%s", port_name);
-
-	pl->port_ids[pl->n_port_ids].pw_node_id = pw_node_id;
-	pl->port_ids[pl->n_port_ids].pw_port_id = pw_port_id;
-	pl->n_port_ids++;
-}
-
-static void on_global(void *data, uint32_t id, uint32_t permissions,
-		const char *type, uint32_t version,
-		const struct spa_dict *props)
-{
-	struct pipeline *pl = data;
-
-	if (strcmp(type, PW_TYPE_INTERFACE_Node) == 0) {
-		const char *node_name = spa_dict_lookup(props, "node.name");
-		if (node_name)
-			pipeline_record_node_id(pl, node_name, id);
-	}
-
-	if (strcmp(type, PW_TYPE_INTERFACE_Port) == 0) {
-		const char *node_id = spa_dict_lookup(props, PW_KEY_NODE_ID);
-		const char *port_name = spa_dict_lookup(props, PW_KEY_PORT_NAME);
-		if (node_id && port_name)
-			pipeline_record_port_id(pl, atoi(node_id), port_name, id);
-		printf("- Recieved port %s\n", port_name);
-	}
-}
-
-static const struct pw_registry_events registry_events = {
-	PW_VERSION_REGISTRY_EVENTS,
-	.global = on_global,
-};
-
-static void on_core_done(void *data, uint32_t id, int seq)
-{
-	struct pipeline *pl = data;
-
-	if (seq == pl->sync_seq) {
-		printf("Received sync %d\n", pl->sync_phase);
-		switch (pl->sync_phase) {
-		case SYNC_PHASE_WAIT_REGISTRY:
-			pl->sync_seq = pw_core_sync(pl->core, PW_ID_CORE, 1);
-			pl->sync_phase = SYNC_PHASE_CREATE_LINKS;
-			break;
-		case SYNC_PHASE_CREATE_LINKS:
-			pipeline_create_links(pl);
-			break;
-		default:
-			break;
+		if (src_port >= src->n_output_ports || dst_port >= dst->n_input_ports) {
+			fprintf(stderr, "pipeline: link '%s' -> '%s': port index out of range\n",
+				lc->from, lc->to);
+			continue;
 		}
+
+		dst->input_buffers[dst_port] = src->output_buffers[src_port];
+		spa_node_port_set_io(dst->node, SPA_DIRECTION_INPUT, dst_port,
+				     SPA_IO_Buffers,
+				     &src->out_io[src_port],
+				     sizeof(src->out_io[src_port]));
+
+		printf("Wired '%s' -> '%s'\n", lc->from, lc->to);
 	}
 }
 
-static const struct pw_core_events core_events = {
-	PW_VERSION_CORE_EVENTS,
-	.done = on_core_done,
-};
+static const char *plugin_path(const struct node_config *nc, char *buf, size_t len)
+{
+	if (nc->plugin_path[0] != '\0')
+		return nc->plugin_path;
+	snprintf(buf, len, "/usr/lib/am62d/plugins/libam62d_%s.so", nc->plugin);
+	return buf;
+}
 
 struct pipeline *pipeline_create(const char *config_path)
 {
-	struct pipeline *pl = pipewire_setup();
+	struct pipeline *pl = calloc(1, sizeof(*pl));
+	if (!pl)
+		return NULL;
 
 	pl->config = config_load(config_path);
-	printf("Loading configuration %s\n", pl->config->name);
+	if (!pl->config) {
+		free(pl);
+		return NULL;
+	}
+
+	pl->sample_rate = PIPELINE_SAMPLE_RATE;
+	pl->quantum = PIPELINE_QUANTUM;
+
+	printf("Loading pipeline '%s'\n", pl->config->name);
+
+	if (pl->config->n_sources > 0 || pl->config->n_sinks > 0) {
+		pl->dataloop = spa_dataloop_create();
+		if (!pl->dataloop) {
+			fprintf(stderr, "pipeline: failed to create data loop\n");
+			goto fail;
+		}
+	}
+
+	uint32_t n_support = 0;
+	const struct spa_support *support = pl->dataloop
+		? spa_dataloop_support(pl->dataloop, &n_support)
+		: NULL;
+
+	for (int i = 0; i < pl->config->n_sources; i++) {
+		const struct io_config *ic = &pl->config->sources[i];
+		const struct driver_info *drv = driver_lookup(ic->driver);
+		if (!drv) {
+			fprintf(stderr, "pipeline: unknown driver '%s'\n", ic->driver);
+			goto fail;
+		}
+
+		char ch_str[16], rate_str[16];
+		snprintf(ch_str, sizeof(ch_str), "%u", ic->channels);
+		snprintf(rate_str, sizeof(rate_str), "%u", ic->rate);
+		struct spa_dict_item items[] = {
+			{ "api.alsa.path", ic->device },
+			{ "audio.channels", ch_str },
+			{ "audio.rate", rate_str },
+		};
+		struct spa_dict info = SPA_DICT_INIT(items, 3);
+
+		printf("Loading source '%s' (%s, device=%s)\n",
+			ic->id, drv->source_factory, ic->device);
+
+		struct spa_node_wrapper *wrap = spa_plugin_load(
+			drv->lib_path, drv->source_factory, &info, support, n_support);
+		if (!wrap) {
+			fprintf(stderr, "pipeline: failed to load source '%s'\n", ic->id);
+			goto fail;
+		}
+		wrap->n_output_ports = ic->channels;
+		wrap->n_input_ports = 0;
+
+		if (spa_node_setup_buffers(wrap, pl->quantum) < 0) {
+			fprintf(stderr, "pipeline: failed to setup buffers for source '%s'\n", ic->id);
+			spa_plugin_unload(wrap);
+			goto fail;
+		}
+
+		pl->sources[pl->n_sources++] = wrap;
+	}
 
 	for (int i = 0; i < pl->config->n_plugins; i++) {
 		const struct node_config *nc = &pl->config->plugins[i];
-		printf("Creating node %s\n", nc->id);
+		char path_buf[256];
+		const char *path = plugin_path(nc, path_buf, sizeof(path_buf));
 
-		pw_core_create_object(pl->core, "adapter",
-			PW_TYPE_INTERFACE_Node, PW_VERSION_NODE,
-			&SPA_DICT_INIT_ARRAY(((struct spa_dict_item[3]) {
-				SPA_DICT_ITEM_INIT("factory.name", nc->plugin),
-				SPA_DICT_ITEM_INIT(PW_KEY_NODE_NAME, nc->id),
-				SPA_DICT_ITEM_INIT(PW_KEY_MEDIA_TYPE, "Audio"),
-			})),
-			0);
+		struct spa_dict_item items[nc->n_params];
+		char val_bufs[MAX_NODE_PARAMS][32];
+		for (int j = 0; j < nc->n_params; j++) {
+			items[j].key = nc->typed_params[j].key;
+			switch (nc->typed_params[j].type) {
+			case AM62D_PARAM_INT:
+				snprintf(val_bufs[j], sizeof(val_bufs[j]), "%d", nc->typed_params[j].v.i);
+				items[j].value = val_bufs[j]; break;
+			case AM62D_PARAM_FLOAT:
+				snprintf(val_bufs[j], sizeof(val_bufs[j]), "%.6g", nc->typed_params[j].v.f);
+				items[j].value = val_bufs[j]; break;
+			case AM62D_PARAM_STRING:
+				items[j].value = nc->typed_params[j].v.s; break;
+			}
+		}
+		struct spa_dict info = SPA_DICT_INIT(items, nc->n_params);
+
+		printf("Loading plugin '%s' from %s\n", nc->id, path);
+
+		struct spa_node_wrapper *wrap = spa_plugin_load(path, nc->plugin, &info, NULL, 0);
+		if (!wrap) {
+			fprintf(stderr, "pipeline: failed to load plugin '%s'\n", nc->id);
+			goto fail;
+		}
+		if (spa_node_configure_ports(wrap, pl->sample_rate) < 0 ||
+			spa_node_setup_buffers(wrap, pl->quantum) < 0) {
+			fprintf(stderr, "pipeline: failed to configure plugin '%s'\n", nc->id);
+			spa_plugin_unload(wrap);
+			goto fail;
+		}
+		pl->nodes[pl->n_nodes++] = wrap;
 	}
 
-	pl->registry = pw_core_get_registry(pl->core, PW_VERSION_REGISTRY, 0);
+	for (int i = 0; i < pl->config->n_sinks; i++) {
+		const struct io_config *ic = &pl->config->sinks[i];
+		const struct driver_info *drv = driver_lookup(ic->driver);
+		if (!drv) {
+			fprintf(stderr, "pipeline: unknown driver '%s'\n", ic->driver);
+			goto fail;
+		}
 
-	pw_registry_add_listener(pl->registry, &pl->registry_listener, &registry_events, pl);
+		char ch_str[16], rate_str[16];
+		snprintf(ch_str, sizeof(ch_str), "%u", ic->channels);
+		snprintf(rate_str, sizeof(rate_str), "%u", ic->rate);
+		struct spa_dict_item items[] = {
+			{ "api.alsa.path", ic->device },
+			{ "audio.channels", ch_str },
+			{ "audio.rate", rate_str },
+		};
+		struct spa_dict info = SPA_DICT_INIT(items, 3);
 
-	pw_core_add_listener(pl->core, &pl->core_listener, &core_events, pl);
-	pl->sync_seq = pw_core_sync(pl->core, PW_ID_CORE, pl->sync_seq);
+		printf("Loading sink '%s' (%s, device=%s)\n",
+			ic->id, drv->sink_factory, ic->device);
+
+		struct spa_node_wrapper *wrap = spa_plugin_load(
+			drv->lib_path, drv->sink_factory, &info, support, n_support);
+		if (!wrap) {
+			fprintf(stderr, "pipeline: failed to load sink '%s'\n", ic->id);
+			goto fail;
+		}
+		wrap->n_input_ports = ic->channels;
+		wrap->n_output_ports = 0;
+
+		if (spa_node_setup_buffers(wrap, pl->quantum) < 0) {
+			fprintf(stderr, "pipeline: failed to setup buffers for sink '%s'\n", ic->id);
+			spa_plugin_unload(wrap);
+			goto fail;
+		}
+
+		pl->sinks[pl->n_sinks++] = wrap;
+	}
+
+	pl->position.state = SPA_IO_POSITION_STATE_RUNNING;
+	pl->position.clock.rate.num = 1;
+	pl->position.clock.rate.denom = pl->sample_rate;
+	pl->position.clock.duration = pl->quantum;
+
+	for (int i = 0; i < pl->n_sources; i++)
+		spa_node_set_clock(pl->sources[i], &pl->clock, &pl->position);
+	for (int i = 0; i < pl->n_nodes; i++)
+		spa_node_set_clock(pl->nodes[i], &pl->clock, &pl->position);
+	for (int i = 0; i < pl->n_sinks; i++)
+		spa_node_set_clock(pl->sinks[i], &pl->clock, &pl->position);
+
+	pipeline_wire_buffers(pl);
+
+	for (int i = 0; i < pl->n_sinks; i++) spa_node_start(pl->sinks[i]);
+	for (int i = 0; i < pl->n_nodes; i++) spa_node_start(pl->nodes[i]);
+	for (int i = 0; i < pl->n_sources; i++) spa_node_start(pl->sources[i]);
+
+	for (int i = 0; i < pl->n_sources; i++)
+		spa_node_set_callbacks(pl->sources[i]->node, &source_cbs, pl);
 
 	return pl;
-}
 
-static void on_signal(void *data, int sig)
-{
-	struct pw_main_loop *loop = data;
-	pw_main_loop_quit(loop);
+fail:
+	pipeline_destroy(pl);
+	return NULL;
 }
 
 void pipeline_run(struct pipeline *pl)
 {
-	printf("Running main loop...\n");
-	pw_loop_add_signal(pw_main_loop_get_loop(pl->loop), SIGINT, on_signal, pl->loop);
-	pw_loop_add_signal(pw_main_loop_get_loop(pl->loop), SIGTERM, on_signal, pl->loop);
+	printf("Running pipeline (Ctrl-C to stop)...\n");
 
-	pw_main_loop_run(pl->loop);
+	sigset_t ss;
+	sigemptyset(&ss);
+	sigaddset(&ss, SIGINT);
+	sigaddset(&ss, SIGTERM);
+
+	int sig = 0;
+	sigwait(&ss, &sig);
+
+	printf("Caught signal %d, shutting down\n", sig);
 }
 
 void pipeline_destroy(struct pipeline *pl)
 {
-	pw_proxy_destroy((struct pw_proxy *)pl->registry);
-	pw_core_disconnect(pl->core);
-	pw_context_destroy(pl->context);
-	pw_main_loop_destroy(pl->loop);
-	pw_deinit();
+	if (!pl)
+		return;
+
+	for (int i = 0; i < pl->n_sources; i++) {
+		if (pl->sources[i]) {
+			spa_node_stop(pl->sources[i]);
+			spa_plugin_unload(pl->sources[i]);
+		}
+	}
+	for (int i = 0; i < pl->n_nodes; i++) {
+		if (pl->nodes[i]) {
+			spa_node_stop(pl->nodes[i]);
+			spa_plugin_unload(pl->nodes[i]);
+		}
+	}
+	for (int i = 0; i < pl->n_sinks; i++) {
+		if (pl->sinks[i]) {
+			spa_node_stop(pl->sinks[i]);
+			spa_plugin_unload(pl->sinks[i]);
+		}
+	}
+
+	if (pl->dataloop)
+		spa_dataloop_destroy(pl->dataloop);
 
 	config_free(pl->config);
-
 	free(pl);
 }

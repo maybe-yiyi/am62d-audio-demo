@@ -1,44 +1,32 @@
 #ifndef PIPELINE_H
 #define PIPELINE_H
 
-#include <pipewire/pipewire.h>
-
+#include <spa/node/io.h>
 #include "config.h"
+#include "dataloop.h"
+#include "plugin.h"
 
-#define MAX_NODE_PORTS 64
-
-struct node_id_entry {
-	char config_id[64];
-	uint32_t pw_node_id;
-};
-
-struct port_id_entry {
-	uint32_t pw_node_id;
-	char port_name[64];
-	uint32_t pw_port_id;
-};
-
-enum sync_phase {
-	SYNC_PHASE_WAIT_REGISTRY = 0,
-	SYNC_PHASE_CREATE_LINKS = 1,
-};
+#define PIPELINE_SAMPLE_RATE 48000
+#define PIPELINE_QUANTUM  1024
 
 struct pipeline {
-	struct pw_main_loop *loop;
-	struct pw_context *context;
-	struct pw_core *core;
-	struct pw_registry *registry;
-	struct spa_hook registry_listener;
-	struct spa_hook core_listener;
-	int sync_seq;
-	enum sync_phase sync_phase;
-
 	struct pipeline_config *config;
+	struct spa_dataloop *dataloop;
 
-	struct node_id_entry node_ids[MAX_NODES];
-	int n_node_ids;
-	struct port_id_entry port_ids[MAX_NODE_PORTS];
-	int n_port_ids;
+	struct spa_node_wrapper *sources[MAX_NODES];
+	int n_sources;
+
+	struct spa_node_wrapper *nodes[MAX_NODES];
+	int n_nodes;
+
+	struct spa_node_wrapper *sinks[MAX_NODES];
+	int n_sinks;
+
+	struct spa_io_clock clock;
+	struct spa_io_position position;
+
+	uint32_t sample_rate;
+	uint32_t quantum;
 };
 
 struct pipeline *pipeline_create(const char *config_path);
