@@ -21,7 +21,7 @@ subdir('third_party/cjson')
 executable('am62d-pipeline',
   framework_src,
   include_directories: inc,
-  dependencies: [dependency('libpipewire-0.3'), dl_dep, cjson_dep, spa_dep, pthread_dep]
+  dependencies: [dl_dep, cjson_dep, spa_dep, pthread_dep]
 )
 
 webrtc_dep = dependency('webrtc-audio-processing-2', required: false)
