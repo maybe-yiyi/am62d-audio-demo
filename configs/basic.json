@@ -1,12 +1,18 @@
 {
   "name": "passthrough",
-  "nodes": [
+  "sources": [
+    { "id": "mic", "driver": "alsa", "device": "hw:0,0", "channels": 2, "rate": 48000 }
+  ],
+  "sinks": [
+    { "id": "spk", "driver": "alsa", "device": "hw:0,0", "channels": 2, "rate": 48000 }
+  ],
+  "plugins": [
     { "id": "pt", "plugin": "passthrough", "config": {} }
   ],
   "links": [
-    { "from": "pw-play:output_FL", "to": "pt:in_l" },
-    { "from": "pt:out_l", "to": "alsa_output.platform-sound.stereo-fallback:playback_FL" },
-    { "from": "pw-play:output_FR", "to": "pt:in_r" },
-    { "from": "pt:out_r", "to": "alsa_output.platform-sound.stereo-fallback:playback_FR" }
+    { "from": "mic:capture_FL", "to": "pt:in_l" },
+    { "from": "mic:capture_FR", "to": "pt:in_r" },
+    { "from": "pt:out_l", "to": "spk:playback_FL" },
+    { "from": "pt:out_r", "to": "spk:playback_FR" }
   ]
 }

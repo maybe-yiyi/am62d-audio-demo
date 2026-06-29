@@ -33,8 +33,8 @@ static void default_logv(void *object, enum spa_log_level level,
 }
 
 static void default_log(void *object, enum spa_log_level level,
-			 const char *file, int line,
-			 const char *func, const char *fmt, ...)
+			const char *file, int line,
+			const char *func, const char *fmt, ...)
 {
 	va_list args;
 	va_start(args, fmt);
@@ -138,15 +138,71 @@ fail_open:
 	return NULL;
 }
 
-int spa_node_configure_ports(struct spa_node_wrapper *wrap, uint32_t sample_rate)
+struct spa_node_wrapper *am62d_plugin_load(const char *path,
+					   const struct am62d_param *params,
+					   int n_params)
 {
+	struct spa_node_wrapper *wrap = calloc(1, sizeof(*wrap));
+	if (!wrap)
+		return NULL;
+
+	wrap->dl_handle = dlopen(path, RTLD_NOW | RTLD_LOCAL);
+	if (!wrap->dl_handle) {
+		fprintf(stderr, "plugin: dlopen(%s) failed: %s\n", path, dlerror());
+		goto fail_open;
+	}
+
+	const struct am62d_plugin *plugin =
+		(const struct am62d_plugin *)dlsym(wrap->dl_handle, "AM62D_PLUGIN_ENTRY");
+	if (!plugin) {
+		fprintf(stderr, "plugin: %s: missing AM62D_PLUGIN_ENTRY\n", path);
+		goto fail_sym;
+	}
+
+	if (plugin->abi_magic != AM62D_ABI_MAGIC || plugin->abi_major != AM62D_ABI_MAJOR) {
+		fprintf(stderr, "plugin: %s: ABI mismatch\n", path);
+		goto fail_sym;
+	}
+
+	snprintf(wrap->factory_name, sizeof(wrap->factory_name), "%s", plugin->name);
+
+	if (plugin->init(&wrap->am62d_priv, params, n_params) < 0) {
+		fprintf(stderr, "plugin: %s: init failed\n", plugin->name);
+		goto fail_sym;
+	}
+
+	for (uint32_t i = 0; i < plugin->n_ports; i++) {
+		if (plugin->ports[i].type != AM62D_PORT_AUDIO_PCM)
+			continue;
+		if (plugin->ports[i].dir == AM62D_DIR_IN)
+			wrap->n_input_ports++;
+		else
+			wrap->n_output_ports++;
+	}
+
+	wrap->am62d = plugin;
+	return wrap;
+
+fail_sym:
+	dlclose(wrap->dl_handle);
+fail_open:
+	free(wrap);
+	return NULL;
+}
+
+int spa_node_configure_ports(struct spa_node_wrapper *wrap, uint32_t sample_rate, uint32_t channels,
+			     enum spa_audio_format format)
+{
+	if (!wrap->node)
+		return 0;
+
 	uint8_t buf[1024];
 	struct spa_pod_builder b = SPA_POD_BUILDER_INIT(buf, sizeof(buf));
 
 	struct spa_audio_info_raw info = {
-		.format = SPA_AUDIO_FORMAT_F32P,
+		.format = format,
 		.rate = sample_rate,
-		.channels = 1,
+		.channels = channels,
 	};
 
 	struct spa_pod *param = spa_format_audio_raw_build(&b, SPA_PARAM_Format, &info);
@@ -219,56 +275,65 @@ int spa_node_setup_buffers(struct spa_node_wrapper *wrap, uint32_t quantum)
 	int res;
 
 	for (uint32_t i = 0; i < wrap->n_input_ports; i++) {
-		if (!wrap->input_buffers[i]) {
-			wrap->input_buffers[i] = alloc_buffer(quantum);
-			if (!wrap->input_buffers[i])
+		struct spa_buffer *bufs[MAX_BUFFERS_PER_PORT];
+		for (uint32_t b = 0; b < MAX_BUFFERS_PER_PORT; b++) {
+			wrap->input_buffers[i][b] = alloc_buffer(quantum);
+			if (!wrap->input_buffers[i][b])
 				return -ENOMEM;
+			bufs[b] = wrap->input_buffers[i][b];
 		}
 
-		res = spa_node_port_use_buffers(wrap->node, SPA_DIRECTION_INPUT, i,
-						0, &wrap->input_buffers[i], 1);
-		if (res < 0 && res != -ENOENT) {
-			fprintf(stderr, "plugin: %s: port_use_buffers input %u failed: %s\n",
-				wrap->factory_name, i, strerror(-res));
-			return res;
-		}
+		if (wrap->node) {
+			res = spa_node_port_use_buffers(wrap->node, SPA_DIRECTION_INPUT, i,
+							0, bufs, MAX_BUFFERS_PER_PORT);
+			if (res < 0 && res != -ENOENT) {
+				fprintf(stderr, "plugin: %s: port_use_buffers input %u failed: %s\n",
+					wrap->factory_name, i, strerror(-res));
+				return res;
+			}
 
-		wrap->in_io[i] = SPA_IO_BUFFERS_INIT;
-		spa_node_port_set_io(wrap->node, SPA_DIRECTION_INPUT, i,
-				SPA_IO_Buffers,
-				&wrap->in_io[i], sizeof(wrap->in_io[i]));
+			wrap->in_io[i] = SPA_IO_BUFFERS_INIT;
+			spa_node_port_set_io(wrap->node, SPA_DIRECTION_INPUT, i,
+					SPA_IO_Buffers,
+					&wrap->in_io[i], sizeof(wrap->in_io[i]));
+		}
 	}
 
 	for (uint32_t i = 0; i < wrap->n_output_ports; i++) {
-		if (!wrap->output_buffers[i]) {
-			wrap->output_buffers[i] = alloc_buffer(quantum);
-			if (!wrap->output_buffers[i])
+		struct spa_buffer *bufs[MAX_BUFFERS_PER_PORT];
+		for (uint32_t b = 0; b < MAX_BUFFERS_PER_PORT; b++) {
+			wrap->output_buffers[i][b] = alloc_buffer(quantum);
+			if (!wrap->output_buffers[i][b])
 				return -ENOMEM;
+			bufs[b] = wrap->output_buffers[i][b];
 		}
 
-		res = spa_node_port_use_buffers(wrap->node, SPA_DIRECTION_OUTPUT, i,
-						0, &wrap->output_buffers[i], 1);
-		if (res < 0 && res != -ENOENT) {
-			fprintf(stderr, "plugin: %s: port_use_buffers output %u failed: %s\n",
-				wrap->factory_name, i, strerror(-res));
-			return res;
-		}
+		if (wrap->node) {
+			res = spa_node_port_use_buffers(wrap->node, SPA_DIRECTION_OUTPUT, i,
+							0, bufs, MAX_BUFFERS_PER_PORT);
+			if (res < 0 && res != -ENOENT) {
+				fprintf(stderr, "plugin: %s: port_use_buffers output %u failed: %s\n",
+					wrap->factory_name, i, strerror(-res));
+				return res;
+			}
 
-		wrap->out_io[i] = SPA_IO_BUFFERS_INIT;
-		spa_node_port_set_io(wrap->node, SPA_DIRECTION_OUTPUT, i,
-				SPA_IO_Buffers,
-				&wrap->out_io[i], sizeof(wrap->out_io[i]));
+			wrap->out_io[i] = SPA_IO_BUFFERS_INIT;
+			spa_node_port_set_io(wrap->node, SPA_DIRECTION_OUTPUT, i,
+					SPA_IO_Buffers,
+					&wrap->out_io[i], sizeof(wrap->out_io[i]));
+		}
 	}
 
 	return 0;
 }
 
-/* ---------- spa_node_set_clock ---------- */
-
 int spa_node_set_clock(struct spa_node_wrapper *wrap,
-			struct spa_io_clock *clock,
-			struct spa_io_position *position)
+		       struct spa_io_clock *clock,
+		       struct spa_io_position *position)
 {
+	if (!wrap->node)
+		return 0;
+
 	int res;
 
 	res = spa_node_set_io(wrap->node, SPA_IO_Clock, clock, sizeof(*clock));
@@ -290,6 +355,9 @@ int spa_node_set_clock(struct spa_node_wrapper *wrap,
 
 int spa_node_start(struct spa_node_wrapper *wrap)
 {
+	if (!wrap->node)
+		return 0;
+
 	struct spa_command cmd = SPA_NODE_COMMAND_INIT(SPA_NODE_COMMAND_Start);
 	int res = spa_node_send_command(wrap->node, &cmd);
 	if (res < 0)
@@ -300,6 +368,9 @@ int spa_node_start(struct spa_node_wrapper *wrap)
 
 int spa_node_stop(struct spa_node_wrapper *wrap)
 {
+	if (!wrap->node)
+		return 0;
+
 	struct spa_command cmd = SPA_NODE_COMMAND_INIT(SPA_NODE_COMMAND_Pause);
 	int res = spa_node_send_command(wrap->node, &cmd);
 	if (res < 0)
@@ -314,13 +385,20 @@ void spa_plugin_unload(struct spa_node_wrapper *wrap)
 		return;
 
 	for (uint32_t i = 0; i < wrap->n_input_ports; i++)
-		free(wrap->input_buffers[i]);
+		for (uint32_t b = 0; b < MAX_BUFFERS_PER_PORT; b++)
+			free(wrap->input_buffers[i][b]);
 	for (uint32_t i = 0; i < wrap->n_output_ports; i++)
-		free(wrap->output_buffers[i]);
+		for (uint32_t b = 0; b < MAX_BUFFERS_PER_PORT; b++)
+			free(wrap->output_buffers[i][b]);
 
-	if (wrap->handle && wrap->handle->clear)
-		wrap->handle->clear(wrap->handle);
-	free(wrap->handle);
+	if (wrap->am62d) {
+		if (wrap->am62d->destroy)
+			wrap->am62d->destroy(wrap->am62d_priv);
+	} else {
+		if (wrap->handle && wrap->handle->clear)
+			wrap->handle->clear(wrap->handle);
+		free(wrap->handle);
+	}
 
 	dlclose(wrap->dl_handle);
 	free(wrap);

@@ -2,3 +2,8 @@ option('plugins',
   type: 'array',
   value: ['passthrough', 'webrtc'],
   description: 'Plugins to build')
+
+option('spa_plugin_dir',
+  type: 'string',
+  value: '',
+  description: 'Override SPA plugin directory (default: from libspa-0.2 pkg-config)')

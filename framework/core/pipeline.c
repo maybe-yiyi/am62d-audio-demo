@@ -6,6 +6,7 @@
 
 #include <spa/node/node.h>
 #include <spa/node/io.h>
+#include <spa/param/audio/raw.h>
 #include <spa/utils/dict.h>
 
 #include "config.h"
@@ -21,10 +22,37 @@ static int ready_cb(void *data, int status)
 
 	for (int i = 0; i < pl->n_sources; i++)
 		spa_node_process(pl->sources[i]->node);
-	for (int i = 0; i < pl->n_nodes; i++)
-		spa_node_process(pl->nodes[i]->node);
+
+	for (int i = 0; i < pl->n_nodes; i++) {
+		struct spa_node_wrapper *w = pl->nodes[i];
+		if (w->am62d) {
+			float *in_ptrs[MAX_PORTS_PER_NODE] = {NULL};
+			float *out_ptrs[MAX_PORTS_PER_NODE] = {NULL};
+			for (uint32_t j = 0; j < w->n_input_ports; j++)
+				if (w->input_buffers[j][0])
+					in_ptrs[j] = w->input_buffers[j][0]->datas[0].data;
+			for (uint32_t j = 0; j < w->n_output_ports; j++)
+				if (w->output_buffers[j][0])
+					out_ptrs[j] = w->output_buffers[j][0]->datas[0].data;
+			w->am62d->process(w->am62d_priv, (const float **)in_ptrs, out_ptrs,
+					PIPELINE_QUANTUM, NULL, NULL, NULL);
+			for (uint32_t j = 0; j < w->n_output_ports; j++) {
+				w->out_io[j].status = SPA_STATUS_HAVE_DATA;
+				w->out_io[j].buffer_id = 0;
+			}
+		} else {
+			spa_node_process(w->node);
+		}
+	}
+
 	for (int i = 0; i < pl->n_sinks; i++)
 		spa_node_process(pl->sinks[i]->node);
+
+	for (int i = 0; i < pl->n_sources; i++)
+		for (uint32_t p = 0; p < (uint32_t)pl->sources[i]->n_output_ports; p++) {
+			pl->sources[i]->out_io[p].status = SPA_STATUS_NEED_DATA;
+			pl->sources[i]->out_io[p].buffer_id = SPA_ID_INVALID;
+		}
 
 	return 0;
 }
@@ -79,11 +107,12 @@ static void pipeline_wire_buffers(struct pipeline *pl)
 			continue;
 		}
 
-		dst->input_buffers[dst_port] = src->output_buffers[src_port];
-		spa_node_port_set_io(dst->node, SPA_DIRECTION_INPUT, dst_port,
-				     SPA_IO_Buffers,
-				     &src->out_io[src_port],
-				     sizeof(src->out_io[src_port]));
+		dst->input_buffers[dst_port][0] = src->output_buffers[src_port][0];
+		if (dst->node)
+			spa_node_port_set_io(dst->node, SPA_DIRECTION_INPUT, dst_port,
+					     SPA_IO_Buffers,
+					     &src->out_io[src_port],
+					     sizeof(src->out_io[src_port]));
 
 		printf("Wired '%s' -> '%s'\n", lc->from, lc->to);
 	}
@@ -154,10 +183,11 @@ struct pipeline *pipeline_create(const char *config_path)
 			fprintf(stderr, "pipeline: failed to load source '%s'\n", ic->id);
 			goto fail;
 		}
-		wrap->n_output_ports = ic->channels;
+		wrap->n_output_ports = 1;
 		wrap->n_input_ports = 0;
 
-		if (spa_node_setup_buffers(wrap, pl->quantum) < 0) {
+		if (spa_node_configure_ports(wrap, ic->rate, ic->channels, SPA_AUDIO_FORMAT_S16_LE) < 0 ||
+			spa_node_setup_buffers(wrap, pl->quantum) < 0) {
 			fprintf(stderr, "pipeline: failed to setup buffers for source '%s'\n", ic->id);
 			spa_plugin_unload(wrap);
 			goto fail;
@@ -171,32 +201,14 @@ struct pipeline *pipeline_create(const char *config_path)
 		char path_buf[256];
 		const char *path = plugin_path(nc, path_buf, sizeof(path_buf));
 
-		struct spa_dict_item items[nc->n_params];
-		char val_bufs[MAX_NODE_PARAMS][32];
-		for (int j = 0; j < nc->n_params; j++) {
-			items[j].key = nc->typed_params[j].key;
-			switch (nc->typed_params[j].type) {
-			case AM62D_PARAM_INT:
-				snprintf(val_bufs[j], sizeof(val_bufs[j]), "%d", nc->typed_params[j].v.i);
-				items[j].value = val_bufs[j]; break;
-			case AM62D_PARAM_FLOAT:
-				snprintf(val_bufs[j], sizeof(val_bufs[j]), "%.6g", nc->typed_params[j].v.f);
-				items[j].value = val_bufs[j]; break;
-			case AM62D_PARAM_STRING:
-				items[j].value = nc->typed_params[j].v.s; break;
-			}
-		}
-		struct spa_dict info = SPA_DICT_INIT(items, nc->n_params);
-
 		printf("Loading plugin '%s' from %s\n", nc->id, path);
 
-		struct spa_node_wrapper *wrap = spa_plugin_load(path, nc->plugin, &info, NULL, 0);
+		struct spa_node_wrapper *wrap = am62d_plugin_load(path, nc->typed_params, nc->n_params);
 		if (!wrap) {
 			fprintf(stderr, "pipeline: failed to load plugin '%s'\n", nc->id);
 			goto fail;
 		}
-		if (spa_node_configure_ports(wrap, pl->sample_rate) < 0 ||
-			spa_node_setup_buffers(wrap, pl->quantum) < 0) {
+		if (spa_node_setup_buffers(wrap, pl->quantum) < 0) {
 			fprintf(stderr, "pipeline: failed to configure plugin '%s'\n", nc->id);
 			spa_plugin_unload(wrap);
 			goto fail;
@@ -231,10 +243,11 @@ struct pipeline *pipeline_create(const char *config_path)
 			fprintf(stderr, "pipeline: failed to load sink '%s'\n", ic->id);
 			goto fail;
 		}
-		wrap->n_input_ports = ic->channels;
+		wrap->n_input_ports = 1;
 		wrap->n_output_ports = 0;
 
-		if (spa_node_setup_buffers(wrap, pl->quantum) < 0) {
+		if (spa_node_configure_ports(wrap, ic->rate, ic->channels, SPA_AUDIO_FORMAT_S16_LE) < 0 ||
+			spa_node_setup_buffers(wrap, pl->quantum) < 0) {
 			fprintf(stderr, "pipeline: failed to setup buffers for sink '%s'\n", ic->id);
 			spa_plugin_unload(wrap);
 			goto fail;

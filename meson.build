@@ -11,7 +11,10 @@ dl_dep = cc.find_library('dl', required: false)
 pthread_dep = dependency('threads')
 
 spa_dep = dependency('libspa-0.2')
-spa_plugin_dir = spa_dep.get_variable(pkgconfig: 'plugindir')
+spa_plugin_dir = get_option('spa_plugin_dir')
+if spa_plugin_dir == ''
+  spa_plugin_dir = spa_dep.get_variable(pkgconfig: 'plugindir')
+endif
 add_project_arguments('-DSPA_PLUGIN_DIR="' + spa_plugin_dir + '"', language: 'c')
 add_project_arguments('-DSPA_PLUGIN_DIR="' + spa_plugin_dir + '"', language: 'cpp')
 
