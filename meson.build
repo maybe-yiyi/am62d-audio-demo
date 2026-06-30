@@ -10,11 +10,12 @@ subdir('third_party/cjson')
 
 cc = meson.get_compiler('c')
 dl_dep = cc.find_library('dl', required: false)
+lilv_dep = dependency('lilv-0')
 
 executable('am62d-pipeline',
   framework_src,
   include_directories: inc,
-  dependencies: [dependency('libpipewire-0.3'), dl_dep, cjson_dep]
+  dependencies: [dependency('libpipewire-0.3'), dl_dep, cjson_dep, lilv_dep]
 )
 
 webrtc_dep = dependency('webrtc-audio-processing-2', required: false)
