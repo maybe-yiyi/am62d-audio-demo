@@ -1,57 +1,78 @@
-#include <string.h>
 #include <stdlib.h>
+#include <string.h>
 
-#include "am62d_plugin.h"
+#include <lv2/core/lv2.h>
 
-struct priv {};
+#define PASSTHROUGH_URI "urn:am62d:passthrough"
 
-static int plugin_init(void **priv, const struct am62d_param *params, int n_params)
-{
-	(void)params; (void)n_params;
-	struct priv *p = calloc(1, sizeof(*p));
-	if (!p)
-		return -1;
-	*priv = p;
-	return 0;
-}
-
-static void plugin_destroy(void *priv)
-{
-	free(priv);
-}
-
-static int plugin_process(void *priv,
-			  const float **in, float **out, uint32_t n_frames,
-			  struct am62d_data_buf *const *in_meta,
-			  struct am62d_data_buf **out_meta,
-			  float *out_ctrl)
-{
-	(void)priv; (void)in_meta; (void)out_meta; (void)out_ctrl;
-
-	if (in[0] == NULL || out[0] == NULL || in[1] == NULL || out[1] == NULL)
-		return 1;
-
-	memcpy(out[0], in[0], n_frames * sizeof(float));
-	memcpy(out[1], in[1], n_frames * sizeof(float));
-	return 0;
-}
-
-static const struct am62d_port_desc ports[] = {
-	{ "in_l", AM62D_PORT_AUDIO_PCM, AM62D_DIR_IN, {{1}} },
-	{ "out_l", AM62D_PORT_AUDIO_PCM, AM62D_DIR_OUT, {{1}} },
-	{ "in_r", AM62D_PORT_AUDIO_PCM, AM62D_DIR_IN, {{1}} },
-	{ "out_r", AM62D_PORT_AUDIO_PCM, AM62D_DIR_OUT, {{1}} }
+enum {
+	PORT_IN_L = 0,
+	PORT_OUT_L = 1,
+	PORT_IN_R = 2,
+	PORT_OUT_R = 3,
 };
 
-AM62D_PLUGIN_EXPORT const struct am62d_plugin AM62D_PLUGIN_ENTRY = {
-	.abi_magic = AM62D_ABI_MAGIC,
-	.abi_major = AM62D_ABI_MAJOR,
-	.abi_minor = AM62D_ABI_MINOR,
-	.name = "passthrough",
-	.executor = AM62D_EXEC_A53,
-	.ports = ports,
-	.n_ports = sizeof(ports) / sizeof(ports[0]),
-	.init = plugin_init,
-	.destroy = plugin_destroy,
-	.process = plugin_process,
+struct priv {
+	const float *in_l;
+	float *out_l;
+	const float *in_r;
+	float *out_r;
 };
+
+static LV2_Handle instantiate(const LV2_Descriptor *descriptor,
+				double sample_rate,
+				const char *bundle_path,
+				const LV2_Feature *const *features)
+{
+	(void)descriptor; (void)sample_rate; (void)bundle_path; (void)features;
+	return calloc(1, sizeof(struct priv));
+}
+
+static void connect_port(LV2_Handle instance, uint32_t port, void *data)
+{
+	struct priv *p = instance;
+	switch (port) {
+	case PORT_IN_L:
+		p->in_l = data;
+		break;
+	case PORT_OUT_L:
+		p->out_l = data;
+		break;
+	case PORT_IN_R:
+		p->in_r = data;
+		break;
+	case PORT_OUT_R:
+		p->out_r = data;
+		break;
+	}
+}
+
+static void run(LV2_Handle instance, uint32_t n_samples)
+{
+	struct priv *p = instance;
+	if (p->in_l && p->out_l)
+		memcpy(p->out_l, p->in_l, n_samples * sizeof(float));
+	if (p->in_r && p->out_r)
+		memcpy(p->out_r, p->in_r, n_samples * sizeof(float));
+}
+
+static void cleanup(LV2_Handle instance)
+{
+	free(instance);
+}
+
+static const LV2_Descriptor descriptor = {
+	.URI = PASSTHROUGH_URI,
+	.instantiate = instantiate,
+	.connect_port = connect_port,
+	.activate = NULL,
+	.run = run,
+	.deactivate = NULL,
+	.cleanup = cleanup,
+	.extension_data = NULL,
+};
+
+LV2_SYMBOL_EXPORT const LV2_Descriptor *lv2_descriptor(uint32_t index)
+{
+	return index == 0 ? &descriptor : NULL;
+}
