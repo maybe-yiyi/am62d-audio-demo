@@ -52,4 +52,7 @@ foreach plugin : plugins
   )
 endforeach
 
+install_data('plugins/manifest.ttl', 'plugins/passthrough.ttl',
+  install_dir: '/usr/lib/am62d/plugins')
+
 install_subdir('configs/', install_dir: '/usr/lib/am62d/')
