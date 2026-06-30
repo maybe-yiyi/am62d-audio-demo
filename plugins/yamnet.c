@@ -215,10 +215,21 @@ static void run(LV2_Handle instance, uint32_t n_samples)
 		ring_reset_hop(&p->ring);
 	}
 
-	/* Consume latest result */
+	/* Consume latest result and log to stderr */
+	static const char *bucket_names[NUM_BUCKETS] = {
+		"speech", "alert",  "laugh", "crowd",
+		"hvac",   "noise",  "door",  "music", "typing"
+	};
 	result_t res;
-	if (result_try_pop(&p->result_queue, &res))
+	if (result_try_pop(&p->result_queue, &res)) {
 		memcpy(p->ctrl_buf, res.scores, sizeof(p->ctrl_buf));
+
+		/* Print all 9 buckets so low scores are visible */
+		fprintf(stderr, "yamnet:");
+		for (int i = 0; i < NUM_BUCKETS; i++)
+			fprintf(stderr, " %s=%.2f", bucket_names[i], p->ctrl_buf[i]);
+		fprintf(stderr, "\n");
+	}
 
 	for (int i = 0; i < NUM_BUCKETS; i++)
 		if (p->ctrl[i])
