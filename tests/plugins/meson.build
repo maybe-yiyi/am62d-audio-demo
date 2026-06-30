@@ -6,3 +6,9 @@ test('spsc_queue',
     executable('test_spsc', 'test_spsc.c',
         include_directories: plugin_inc,
         c_args: ['-std=c11']))
+
+test('yamnet_dsp',
+    executable('test_dsp', 'test_dsp.c',
+        include_directories: plugin_inc,
+        dependencies: [libm_dep],
+        c_args: ['-std=c11']))
