@@ -16,9 +16,23 @@ executable('am62d-pipeline',
 )
 
 webrtc_dep = dependency('webrtc-audio-processing-2', required: false)
+tflite_dep = dependency('tensorflowlite_c', required: false)
+
+# RPATH recorded at configure time so libam62d_yamnet.so finds libtensorflowlite_c.so
+# without requiring LD_LIBRARY_PATH at runtime.
+tflite_libdir = ''
+if tflite_dep.found()
+  tflite_libdir = tflite_dep.get_variable(pkgconfig: 'libdir', default_value: '')
+endif
+
 plugin_configs = {
   'passthrough': { 'sources': ['plugins/passthrough.c'], 'deps': [] },
   'webrtc': { 'sources': ['plugins/webrtc.cpp'], 'deps': [webrtc_dep] },
+  'yamnet': {
+    'sources': ['plugins/yamnet.c'],
+    'deps': [tflite_dep],
+    'c_args': ['-DHAVE_TFLITE'],
+  },
 }
 
 plugins = get_option('plugins')
@@ -38,11 +52,14 @@ foreach plugin : plugins
     continue
   endif
 
+  _rpath = (plugin == 'yamnet') ? tflite_libdir : ''
   shared_module('am62d_' + plugin,
     cfg['sources'],
     dependencies: cfg['deps'],
-    c_args: ['-fvisibility=hidden'],
+    c_args: ['-fvisibility=hidden'] + cfg.get('c_args', []),
     cpp_args: ['-fvisibility=hidden'],
+    build_rpath: _rpath,
+    install_rpath: _rpath,
     install: true,
     install_dir: '/usr/lib/am62d/plugins',
   )
