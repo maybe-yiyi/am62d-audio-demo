@@ -19,6 +19,13 @@ struct pipeline *pipewire_setup()
 	pl->loop = pw_main_loop_new(NULL);
 	pl->context = pw_context_new(pw_main_loop_get_loop(pl->loop), NULL, 0);
 	pl->core = pw_context_connect(pl->context, NULL, 0);
+	if (!pl->core) {
+		fprintf(stderr, "pipeline: failed to connect to PipeWire daemon\n");
+		pw_context_destroy(pl->context);
+		pw_main_loop_destroy(pl->loop);
+		free(pl);
+		return NULL;
+	}
 
 	return pl;
 }
@@ -207,6 +214,8 @@ static const struct pw_core_events core_events = {
 struct pipeline *pipeline_create(const char *config_path, const char *plugin_dir)
 {
 	struct pipeline *pl = pipewire_setup();
+	if (!pl)
+		return NULL;
 
 	pl->config = config_load(config_path);
 	printf("Loading configuration %s\n", pl->config->name);
