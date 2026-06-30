@@ -1,0 +1,17 @@
+{
+  "name": "yamnet_demo",
+  "nodes": [
+    {
+      "id": "webrtc",
+      "plugin": "urn:am62d:webrtc"
+    },
+    {
+      "id": "yamnet",
+      "plugin": "urn:am62d:yamnet"
+    }
+  ],
+  "links": [
+    { "from": "webrtc:audio_out_l", "to": "yamnet:in_l" },
+    { "from": "webrtc:audio_out_r", "to": "yamnet:in_r" }
+  ]
+}
