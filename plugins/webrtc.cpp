@@ -1,19 +1,32 @@
 #include <string.h>
 #include <memory>
 
-extern "C" {
-#include "am62d_plugin.h"
-}
+#include <lv2/core/lv2.h>
 
 #include <modules/audio_processing/include/audio_processing.h>
 
+#define WEBRTC_URI "urn:am62d:webrtc"
 #define WEBRTC_FRAMES 480
 
 using NSLevel = webrtc::AudioProcessing::Config::NoiseSuppression::Level;
 
+enum {
+	PORT_IN_L = 0,
+	PORT_IN_R = 1,
+	PORT_OUT_L = 2,
+	PORT_OUT_R = 3,
+	PORT_NS_LEVEL = 4,
+};
+
 struct priv {
 	rtc::scoped_refptr<webrtc::AudioProcessing> apm;
 	webrtc::StreamConfig cfg;
+
+	const float *in_l;
+	const float *in_r;
+	float *out_l;
+	float *out_r;
+	const float *ns_level;
 
 	float in_buf_l[WEBRTC_FRAMES];
 	float in_buf_r[WEBRTC_FRAMES];
@@ -28,7 +41,7 @@ static NSLevel map_level(int v)
 {
 	switch(v) {
 	case 0:
-		return NSLevel::kLow; 
+		return NSLevel::kLow;
 	case 2:
 		return NSLevel::kHigh;
 	case 3:
@@ -58,7 +71,7 @@ static rtc::scoped_refptr<webrtc::AudioProcessing> make_apm(NSLevel level)
 
 	apm_cfg.noise_suppression.enabled = true;
 	apm_cfg.noise_suppression.level = level;
-	
+
 	apm_cfg.high_pass_filter.enabled = true;
 
 	apm_cfg.transient_suppression.enabled = true;
@@ -70,55 +83,72 @@ static rtc::scoped_refptr<webrtc::AudioProcessing> make_apm(NSLevel level)
 	return apm;
 }
 
-static int plugin_init(void **out_priv,
-		const struct am62d_param *params, int n_params)
+static LV2_Handle instantiate(const LV2_Descriptor *descriptor,
+				double sample_rate,
+				const char *bundle_path,
+				const LV2_Feature *const *features)
 {
-	int level_int = 1;
-	for (int i = 0; i < n_params; i++) {
-		if (params[i].type == AM62D_PARAM_INT &&
-			strcmp(params[i].key, "level") == 0)
-			level_int = params[i].v.i;
-	}
-	printf("Set NS level to %d\n", level_int);
+	(void)descriptor; (void)sample_rate; (void)bundle_path; (void)features;
 
-	struct priv *p = new priv;
-	NSLevel level = map_level(level_int);
-	p->apm = make_apm(level);
-	if (!p->apm) {
-		delete p;
-		return -1;
-	}
-
+	priv *p = new priv;
+	p->in_l = nullptr;
+	p->in_r = nullptr;
+	p->out_l = nullptr;
+	p->out_r = nullptr;
+	p->ns_level = nullptr;
 	p->cfg = webrtc::StreamConfig(48000, 2);
 	p->in_fill = 0;
 	p->out_avail = 0;
 	p->out_pos = 0;
-	*out_priv = p;
-	return 0;
+	p->apm = nullptr;
+	return p;
 }
 
-static int plugin_process(void *priv,
-			const float **in, float **out, uint32_t n_frames,
-			struct am62d_data_buf *const *in_meta,
-			struct am62d_data_buf **out_meta,
-			float *out_ctrl)
+static void connect_port(LV2_Handle instance, uint32_t port, void *data)
 {
-	(void)in_meta; (void)out_meta; (void)out_ctrl;
+	priv *p = static_cast<priv *>(instance);
+	switch (port) {
+	case PORT_IN_L:
+		p->in_l = static_cast<const float *>(data);
+		break;
+	case PORT_IN_R:
+		p->in_r = static_cast<const float *>(data);
+		break;
+	case PORT_OUT_L:
+		p->out_l = static_cast<float *>(data);
+		break;
+	case PORT_OUT_R:
+		p->out_r = static_cast<float *>(data);
+		break;
+	case PORT_NS_LEVEL:
+		p->ns_level = static_cast<const float *>(data);
+		break;
+	}
+}
 
-	struct priv *p = static_cast<struct priv *>(priv);
+static void activate(LV2_Handle instance)
+{
+	priv *p = static_cast<priv *>(instance);
+	int level_int = p->ns_level ? static_cast<int>(*p->ns_level) : 1;
+	p->apm = make_apm(map_level(level_int));
+}
 
-	if (!in[0] || !out[0] || !in[1] || !out[1])
-		return 1;
+static void run(LV2_Handle instance, uint32_t n_samples)
+{
+	priv *p = static_cast<priv *>(instance);
+
+	if (!p->in_l || !p->in_r || !p->out_l || !p->out_r || !p->apm)
+		return;
 
 	uint32_t consumed = 0;
 	uint32_t produced = 0;
 
-	while (consumed < n_frames) {
-		if (p->out_avail > 0 && produced < n_frames) {
-			uint32_t to_emit = (n_frames - produced < p->out_avail)
-					? (n_frames - produced) : p->out_avail;
-			memcpy(out[0] + produced, p->out_buf_l + p->out_pos, to_emit * sizeof(float));
-			memcpy(out[1] + produced, p->out_buf_r + p->out_pos, to_emit * sizeof(float));
+	while (consumed < n_samples) {
+		if (p->out_avail > 0 && produced < n_samples) {
+			uint32_t to_emit = (n_samples - produced < p->out_avail)
+					? (n_samples - produced) : p->out_avail;
+			memcpy(p->out_l + produced, p->out_buf_l + p->out_pos, to_emit * sizeof(float));
+			memcpy(p->out_r + produced, p->out_buf_r + p->out_pos, to_emit * sizeof(float));
 			produced += to_emit;
 			p->out_pos += to_emit;
 			p->out_avail -= to_emit;
@@ -128,9 +158,10 @@ static int plugin_process(void *priv,
 		}
 
 		uint32_t space = WEBRTC_FRAMES - p->in_fill;
-		uint32_t to_consume = (n_frames - consumed < space) ? (n_frames - consumed) : space;
-		memcpy(p->in_buf_l + p->in_fill, in[0] + consumed, to_consume * sizeof(float));
-		memcpy(p->in_buf_r + p->in_fill, in[1] + consumed, to_consume * sizeof(float));
+		uint32_t to_consume = (n_samples - consumed < space)
+				? (n_samples - consumed) : space;
+		memcpy(p->in_buf_l + p->in_fill, p->in_l + consumed, to_consume * sizeof(float));
+		memcpy(p->in_buf_r + p->in_fill, p->in_r + consumed, to_consume * sizeof(float));
 		p->in_fill += to_consume;
 		consumed += to_consume;
 
@@ -143,38 +174,31 @@ static int plugin_process(void *priv,
 			p->out_pos = 0;
 		}
 	}
-
-	return 0;
 }
 
-static int plugin_set_control(void *priv, const char *key, float value)
+static void deactivate(LV2_Handle instance)
 {
-	(void)priv; (void)key; (void)value;
-	return 0;
+	priv *p = static_cast<priv *>(instance);
+	p->apm = nullptr;
 }
 
-static void plugin_destroy(void *priv)
+static void cleanup(LV2_Handle instance)
 {
-	delete static_cast<struct priv *>(priv);
+	delete static_cast<priv *>(instance);
 }
 
-static const struct am62d_port_desc ports[] = {
-	{ "audio_in_l", AM62D_PORT_AUDIO_PCM, AM62D_DIR_IN, {{1}} },
-	{ "audio_in_r", AM62D_PORT_AUDIO_PCM, AM62D_DIR_IN, {{1}} },
-	{ "audio_out_l", AM62D_PORT_AUDIO_PCM, AM62D_DIR_OUT, {{1}} },
-	{ "audio_out_r", AM62D_PORT_AUDIO_PCM, AM62D_DIR_OUT, {{1}} },
+static const LV2_Descriptor descriptor = {
+	.URI = WEBRTC_URI,
+	.instantiate = instantiate,
+	.connect_port = connect_port,
+	.activate = activate,
+	.run = run,
+	.deactivate = deactivate,
+	.cleanup = cleanup,
+	.extension_data = nullptr,
 };
 
-extern "C" AM62D_PLUGIN_EXPORT const struct am62d_plugin AM62D_PLUGIN_ENTRY = {
-	.abi_magic = AM62D_ABI_MAGIC,
-	.abi_major = AM62D_ABI_MAJOR,
-	.abi_minor = AM62D_ABI_MINOR,
-	.name = "webrtc",
-	.executor = AM62D_EXEC_A53,
-	.ports = ports,
-	.n_ports = sizeof(ports) / sizeof(ports[0]),
-	.init = plugin_init,
-	.destroy = plugin_destroy,
-	.process = plugin_process,
-	.set_control = plugin_set_control,
-};
+extern "C" LV2_SYMBOL_EXPORT const LV2_Descriptor *lv2_descriptor(uint32_t index)
+{
+	return index == 0 ? &descriptor : nullptr;
+}

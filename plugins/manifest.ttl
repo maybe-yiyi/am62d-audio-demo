@@ -5,3 +5,8 @@
 	a lv2:Plugin ;
 	lv2:binary <libam62d_passthrough.so> ;
 	rdfs:seeAlso <passthrough.ttl> .
+
+<urn:am62d:webrtc>
+	a lv2:Plugin ;
+	lv2:binary <libam62d_webrtc.so> ;
+	rdfs:seeAlso <webrtc.ttl> .
