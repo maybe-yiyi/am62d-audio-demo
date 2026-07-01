@@ -21,6 +21,10 @@ tflite_dep = dependency('tensorflow2-lite', required: false)
 plugin_configs = {
   'passthrough': { 'sources': ['plugins/passthrough.c'], 'deps': [] },
   'webrtc': { 'sources': ['plugins/webrtc.cpp'], 'deps': [webrtc_dep] },
+  'yamnet': {
+    'sources': ['plugins/yamnet.c'],
+    'deps': [tflite_dep],
+  },
 }
 
 plugins = get_option('plugins')
