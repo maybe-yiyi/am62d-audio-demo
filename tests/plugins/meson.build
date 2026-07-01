@@ -19,3 +19,13 @@ test('yamnet_mock',
         include_directories: plugin_inc,
         dependencies: [thread_dep, libm_dep],
         c_args: ['-std=c11']))
+
+tflite_dep = dependency('tensorflowlite_c', required: false)
+if tflite_dep.found()
+    test('yamnet_tflite',
+        executable('test_yamnet_tflite', 'test_yamnet_tflite.c',
+            include_directories: plugin_inc,
+            dependencies: [thread_dep, libm_dep, tflite_dep],
+            c_args: ['-std=c11', '-DHAVE_TFLITE']),
+        timeout: 120)
+endif
