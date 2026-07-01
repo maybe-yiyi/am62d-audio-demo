@@ -2,48 +2,36 @@
 #define A53_NODE_H
 
 #include <pipewire/pipewire.h>
-
-#include "am62d_plugin.h"
+#include <lilv/lilv.h>
 
 #define MAX_PORTS 8
-#define MAX_CTRL_ROUTES 8
 
 struct port_data {
 	/* intentionally empty */
 };
 
-struct ctrl_route {
-	int ctrl_out_idx;
-	struct a53_node *target;
-	char param_key[64];
-};
-
 struct a53_node {
 	struct pw_filter *filter;
 	struct spa_hook filter_listener;
-	const struct am62d_plugin *plugin;
-	void *priv;
+	const LilvPlugin *plugin;
+	LilvInstance *instance;
+
 	struct port_data *in_ports[MAX_PORTS];
 	struct port_data *out_ports[MAX_PORTS];
+	uint32_t in_port_indices[MAX_PORTS];
+	uint32_t out_port_indices[MAX_PORTS];
 	int n_in;
 	int n_out;
 
-	struct am62d_data_buf *meta_in[MAX_PORTS];
-	struct am62d_data_buf *meta_out[MAX_PORTS];
-	int n_meta_in;
-	int n_meta_out;
-
-	struct ctrl_route ctrl_in_routes[MAX_CTRL_ROUTES];
-	float ctrl_out_vals[MAX_PORTS];
-	int n_ctrl_in;
-	int n_ctrl_out;
+	float ctrl_bufs[MAX_PORTS];
+	int n_ctrl;
 };
 
 struct a53_node *a53_node_create(struct pw_core *core,
-				 const struct am62d_plugin *plugin,
-				 const char *node_id,
-				 const struct am62d_param *params,
-				 int n_params);
+				 LilvWorld *world,
+				 const LilvPlugin *plugin,
+				 LilvInstance *instance,
+				 const char *node_name);
 void a53_node_destroy(struct a53_node *node);
 
 #endif

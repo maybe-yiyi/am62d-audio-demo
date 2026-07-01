@@ -33,6 +33,22 @@ int registry_init(const char *dir)
 	return 0;
 }
 
+LilvWorld *registry_world(void)
+{
+	return world;
+}
+
+const LilvPlugin *registry_get_plugin(const char *uri)
+{
+	for (int i = 0; i < cache_count; i++) {
+		const char *cached = lilv_node_as_uri(
+			lilv_plugin_get_uri(cache[i].plugin));
+		if (strcmp(cached, uri) == 0)
+			return cache[i].plugin;
+	}
+	return NULL;
+}
+
 LilvInstance *registry_get(const char *uri)
 {
 	for (int i = 0; i < cache_count; i++) {
