@@ -106,7 +106,7 @@ struct a53_node *a53_node_create(struct pw_core *core,
 		}
 	}
 
-	ret = pw_filter_connect(node->filter,
+	int ret = pw_filter_connect(node->filter,
 			PW_FILTER_FLAG_RT_PROCESS,
 			NULL, 0);
 	if (ret < 0)
