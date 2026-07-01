@@ -84,40 +84,6 @@ struct pipeline_config *config_load(const char *path)
 			goto cleanup_json;
 		}
 
-		struct cJSON *params = cJSON_GetObjectItemCaseSensitive(node, "config");
-		if (params) {
-			const struct cJSON *item;
-			cJSON_ArrayForEach(item, params) {
-				if (conf->nodes[conf->n_nodes].n_params >= MAX_NODE_PARAMS)
-					break;
-				struct am62d_param *p =
-					&conf->nodes[conf->n_nodes].typed_params[conf->nodes[conf->n_nodes].n_params];
-				p->key = item->string;
-				if (cJSON_IsNumber(item)) {
-					double d = item->valuedouble;
-					if (d == (double)(int32_t)d) {
-						p->type = AM62D_PARAM_INT;
-						p->v.i  = (int32_t)d;
-					} else {
-						p->type = AM62D_PARAM_FLOAT;
-						p->v.f  = (float)d;
-					}
-				} else if (cJSON_IsString(item)) {
-					p->type = AM62D_PARAM_STRING;
-					p->v.s  = item->valuestring;
-				} else if (cJSON_IsBool(item)) {
-					p->type = AM62D_PARAM_INT;
-					p->v.i  = cJSON_IsTrue(item) ? 1 : 0;
-				} else {
-					continue;
-				}
-				conf->nodes[conf->n_nodes].n_params++;
-			}
-		} else {
-			fprintf(stderr, "config: node 'config' field missing or malformed\n");
-			goto cleanup_json;
-		}
-
 		conf->n_nodes++;
 	}
 

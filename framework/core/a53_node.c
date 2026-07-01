@@ -1,41 +1,27 @@
 #include <stdlib.h>
 
+#include <lv2/core/lv2.h>
 #include <pipewire/pipewire.h>
 
 #include "a53_node.h"
-#include "cJSON.h"
 #include "param_bus.h"
-
-static enum pw_direction to_pw_direction(enum am62d_port_dir dir)
-{
-	switch (dir) {
-	case AM62D_DIR_IN:
-		return PW_DIRECTION_INPUT;
-	case AM62D_DIR_OUT:
-		return PW_DIRECTION_OUTPUT;
-	default:
-		fprintf(stderr, "a53_node: unknown port direction %d\n", dir);
-		return PW_DIRECTION_INPUT;
-	}
-}
 
 static void on_process(void *data, struct spa_io_position *pos)
 {
 	struct a53_node *node = data;
-	const float *in[MAX_PORTS];
-	float *out[MAX_PORTS];
 	uint32_t n_frames = pos->clock.duration;
 
 	for (int i = 0; i < node->n_in; i++)
-		in[i] = pw_filter_get_dsp_buffer(node->in_ports[i], n_frames);
+		lilv_instance_connect_port(node->instance,
+				node->in_port_indices[i],
+				pw_filter_get_dsp_buffer(node->in_ports[i], n_frames));
+
 	for (int i = 0; i < node->n_out; i++)
-		out[i] = pw_filter_get_dsp_buffer(node->out_ports[i], n_frames);
+		lilv_instance_connect_port(node->instance,
+				node->out_port_indices[i],
+				pw_filter_get_dsp_buffer(node->out_ports[i], n_frames));
 
-	node->plugin->process(node->priv, in, out, n_frames,
-			(struct am62d_data_buf *const *)node->meta_in,
-			node->meta_out,
-			node->ctrl_out_vals);
-
+	lilv_instance_run(node->instance, n_frames);
 	param_bus_dispatch(node);
 }
 
@@ -45,96 +31,78 @@ static const struct pw_filter_events filter_events = {
 };
 
 struct a53_node *a53_node_create(struct pw_core *core,
-				 const struct am62d_plugin *plugin,
-				 const char *node_name,
-				 const struct am62d_param *params,
-				 int n_params)
+				 LilvWorld *world,
+				 const LilvPlugin *plugin,
+				 LilvInstance *instance,
+				 const char *node_name)
 {
+	LilvNode *audio_class = lilv_new_uri(world, LV2_CORE__AudioPort);
+	LilvNode *control_class = lilv_new_uri(world, LV2_CORE__ControlPort);
+	LilvNode *input_class = lilv_new_uri(world, LV2_CORE__InputPort);
+
 	struct a53_node *node = calloc(1, sizeof(struct a53_node));
 	if (!node)
 		goto exit;
 
 	node->plugin = plugin;
+	node->instance = instance;
 
-	int ret = plugin->init(&node->priv, params, n_params);
-	if (ret < 0)
-		goto free_node;
+	const char *plugin_uri = lilv_node_as_uri(lilv_plugin_get_uri(plugin));
 
-	node->filter = pw_filter_new(core, plugin->name,
+	node->filter = pw_filter_new(core, plugin_uri,
 		pw_properties_new(
 			PW_KEY_NODE_NAME, node_name,
 			PW_KEY_MEDIA_TYPE, "AUDIO",
 			PW_KEY_MEDIA_CATEGORY, "FILTER",
 			NULL));
 	if (!node->filter)
-		goto destroy_plugin;
+		goto free_node;
 
-	pw_filter_add_listener(node->filter,
-			&node->filter_listener,
-			&filter_events,
-			node);
+	pw_filter_add_listener(node->filter, &node->filter_listener,
+			&filter_events, node);
 
-	for (int i = 0; i < plugin->n_ports; i++) {
-		const struct am62d_port_desc *desc = &plugin->ports[i];
+	uint32_t n_ports = lilv_plugin_get_num_ports(plugin);
+	for (uint32_t i = 0; i < n_ports; i++) {
+		const LilvPort *port = lilv_plugin_get_port_by_index(plugin, i);
+		bool is_audio = lilv_port_is_a(plugin, port, audio_class);
+		bool is_control = lilv_port_is_a(plugin, port, control_class);
+		bool is_input = lilv_port_is_a(plugin, port, input_class);
+		const char *sym = lilv_node_as_string(lilv_port_get_symbol(plugin, port));
 
-		switch (desc->type) {
-		case AM62D_PORT_METADATA:
-			if (desc->dir != AM62D_DIR_OUT) {
-				if (node->n_meta_in >= MAX_PORTS)
-					goto destroy_filter;
-				node->n_meta_in++;
-				break;
-			}
-
-			if (node->n_meta_out >= MAX_PORTS)
+		if (is_audio) {
+			if (is_input && node->n_in >= MAX_PORTS)
 				goto destroy_filter;
-
-			size_t sz = sizeof(struct am62d_data_buf) + desc->u.meta.payload_size;
-
-			struct am62d_data_buf *buf = calloc(1, sz);
-			if (!buf)
+			if (!is_input && node->n_out >= MAX_PORTS)
 				goto destroy_filter;
-			buf->type_tag     = desc->u.meta.type_tag;
-			buf->payload_size = desc->u.meta.payload_size;
-
-			node->meta_out[node->n_meta_out++] = buf;
-			break;
-		case AM62D_PORT_CONTROL:
-			if (desc->dir == AM62D_DIR_OUT) {
-				if (node->n_ctrl_out >= MAX_PORTS)
-					goto destroy_filter;
-				node->n_ctrl_out++;
-			}
-			break;
-		default:
-			char dsp_format[64];
-			uint32_t ch = desc->u.pcm.n_channels;
-			if (ch == 1)
-				snprintf(dsp_format, sizeof(dsp_format), "32 bit float mono audio");
-			else
-				snprintf(dsp_format, sizeof(dsp_format), "32 bit %u channel audio", ch);
 
 			struct port_data *pd = pw_filter_add_port(node->filter,
-					to_pw_direction(desc->dir),
+					is_input ? PW_DIRECTION_INPUT : PW_DIRECTION_OUTPUT,
 					PW_FILTER_PORT_FLAG_MAP_BUFFERS,
 					sizeof(struct port_data),
 					pw_properties_new(
-						PW_KEY_FORMAT_DSP, dsp_format,
-						PW_KEY_PORT_NAME, desc->name,
+						PW_KEY_FORMAT_DSP, "32 bit float mono audio",
+						PW_KEY_PORT_NAME, sym,
 						NULL),
 					NULL, 0);
 			if (!pd)
 				goto destroy_filter;
 
-			struct port_data **port_arr = (desc->dir == AM62D_DIR_IN)
-				? node->in_ports : node->out_ports;
-			int *n = (desc->dir == AM62D_DIR_IN) ? &node->n_in : &node->n_out;
-
-			if (*n >= MAX_PORTS)
+			if (is_input) {
+				node->in_ports[node->n_in] = pd;
+				node->in_port_indices[node->n_in] = i;
+				node->n_in++;
+			} else {
+				node->out_ports[node->n_out] = pd;
+				node->out_port_indices[node->n_out] = i;
+				node->n_out++;
+			}
+		} else if (is_control) {
+			if (node->n_ctrl >= MAX_PORTS)
 				goto destroy_filter;
-
-			port_arr[*n] = pd;
-			(*n)++;
+			node->ctrl_bufs[node->n_ctrl] = 0.0f;
+			lilv_instance_connect_port(instance, i,
+					&node->ctrl_bufs[node->n_ctrl]);
+			node->n_ctrl++;
 		}
 	}
 
@@ -144,27 +112,27 @@ struct a53_node *a53_node_create(struct pw_core *core,
 	if (ret < 0)
 		goto destroy_filter;
 
+	lilv_instance_activate(instance);
+
+	lilv_node_free(audio_class);
+	lilv_node_free(control_class);
+	lilv_node_free(input_class);
 	return node;
 
 destroy_filter:
-	for (int i = 0; i < node->n_meta_out; i++)
-		free(node->meta_out[i]);
-
 	pw_filter_destroy(node->filter);
-destroy_plugin:
-	plugin->destroy(node->priv);
 free_node:
 	free(node);
 exit:
+	lilv_node_free(audio_class);
+	lilv_node_free(control_class);
+	lilv_node_free(input_class);
 	return NULL;
 }
 
 void a53_node_destroy(struct a53_node *node)
 {
-	for (int i = 0; i < node->n_meta_out; i++)
-		free(node->meta_out[i]);
-
+	lilv_instance_deactivate(node->instance);
 	pw_filter_destroy(node->filter);
-	node->plugin->destroy(node->priv);
 	free(node);
 }

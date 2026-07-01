@@ -5,7 +5,6 @@
 #include <pipewire/pipewire.h>
 
 #include "a53_node.h"
-#include "am62d_plugin.h"
 #include "config.h"
 #include "param_bus.h"
 #include "pipeline.h"
@@ -20,6 +19,13 @@ struct pipeline *pipewire_setup()
 	pl->loop = pw_main_loop_new(NULL);
 	pl->context = pw_context_new(pw_main_loop_get_loop(pl->loop), NULL, 0);
 	pl->core = pw_context_connect(pl->context, NULL, 0);
+	if (!pl->core) {
+		fprintf(stderr, "pipeline: failed to connect to PipeWire daemon\n");
+		pw_context_destroy(pl->context);
+		pw_main_loop_destroy(pl->loop);
+		free(pl);
+		return NULL;
+	}
 
 	return pl;
 }
@@ -47,29 +53,6 @@ static struct a53_node *pipeline_find_node(struct pipeline *pl, const char *conf
 		if (strcmp(pl->config->nodes[i].id, config_id) == 0)
 			return pl->nodes[i];
 	return NULL;
-}
-
-static int port_type(const struct a53_node *node, const char *port_name)
-{
-	for (int i = 0; i < node->plugin->n_ports; i++)
-		if (strcmp(node->plugin->ports[i].name, port_name) == 0)
-			return node->plugin->ports[i].type;
-	return -1;
-}
-
-static int meta_idx(const struct a53_node *node, const char *port_name,
-		    enum am62d_port_dir dir)
-{
-	int idx = 0;
-	for (int i = 0; i < node->plugin->n_ports; i++) {
-		const struct am62d_port_desc *pd = &node->plugin->ports[i];
-		if (pd->type != AM62D_PORT_METADATA || pd->dir != dir)
-			continue;
-		if (strcmp(pd->name, port_name) == 0)
-			return idx;
-		idx++;
-	}
-	return -1;
 }
 
 static void pipeline_wire_control_links(struct pipeline *pl)
@@ -102,39 +85,6 @@ static void pipeline_wire_control_links(struct pipeline *pl)
 	}
 }
 
-static void pipeline_wire_metadata(struct pipeline *pl)
-{
-	for (int i = 0; i < pl->config->n_links; i++) {
-		struct link_config *lc = &pl->config->links[i];
-
-		char src_node_id[64], src_port_name[64];
-		char dst_node_id[64], dst_port_name[64];
-		if (sscanf(lc->from, "%63[^:]:%63s", src_node_id, src_port_name) != 2 ||
-		    sscanf(lc->to,   "%63[^:]:%63s", dst_node_id, dst_port_name) != 2)
-			continue;
-
-		struct a53_node *src = pipeline_find_node(pl, src_node_id);
-		struct a53_node *dst = pipeline_find_node(pl, dst_node_id);
-		if (!src || !dst)
-			continue;
-
-		if (port_type(src, src_port_name) != AM62D_PORT_METADATA)
-			continue;
-
-		int src_idx = meta_idx(src, src_port_name, AM62D_DIR_OUT);
-		int dst_idx = meta_idx(dst, dst_port_name, AM62D_DIR_IN);
-
-		if (src_idx < 0 || dst_idx < 0) {
-			fprintf(stderr, "pipeline: metadata wire failed: %s -> %s\n",
-				lc->from, lc->to);
-			continue;
-		}
-
-		dst->meta_in[dst_idx] = src->meta_out[src_idx];
-		printf("Wired metadata %s -> %s\n", lc->from, lc->to);
-	}
-}
-
 static void pipeline_create_links(struct pipeline *pl)
 {
 	for (int i = 0; i < pl->config->n_links; i++) {
@@ -150,13 +100,6 @@ static void pipeline_create_links(struct pipeline *pl)
 			fprintf(stderr, "pipeline: malformed link '%s' -> '%s'\n",
 				link.from, link.to);
 			continue;
-		}
-
-		struct a53_node *src_node = pipeline_find_node(pl, from_node);
-		if (src_node) {
-			int type = port_type(src_node, from_port);
-			if (type != AM62D_PORT_AUDIO_PCM && type != AM62D_PORT_AUDIO_SPECTRUM)
-				continue;
 		}
 
 		uint32_t out_node = find_node_id(pl, from_node);
@@ -255,7 +198,6 @@ static void on_core_done(void *data, uint32_t id, int seq)
 			break;
 		case SYNC_PHASE_CREATE_LINKS:
 			pipeline_wire_control_links(pl);
-			pipeline_wire_metadata(pl);
 			pipeline_create_links(pl);
 			break;
 		default:
@@ -272,6 +214,8 @@ static const struct pw_core_events core_events = {
 struct pipeline *pipeline_create(const char *config_path, const char *plugin_dir)
 {
 	struct pipeline *pl = pipewire_setup();
+	if (!pl)
+		return NULL;
 
 	pl->config = config_load(config_path);
 	printf("Loading configuration %s\n", pl->config->name);
@@ -282,10 +226,11 @@ struct pipeline *pipeline_create(const char *config_path, const char *plugin_dir
 		struct node_config node_conf = pl->config->nodes[i];
 		printf("Loading node %s\n", node_conf.id);
 
-		const struct am62d_plugin *plugin = registry_get(node_conf.plugin);
+		LilvInstance *instance = registry_get(node_conf.plugin);
+		const LilvPlugin *plugin = registry_get_plugin(node_conf.plugin);
 
-		struct a53_node *a53_node = a53_node_create(pl->core, plugin, node_conf.id,
-						node_conf.typed_params, node_conf.n_params);
+		struct a53_node *a53_node = a53_node_create(pl->core, registry_world(),
+						plugin, instance, node_conf.id);
 		if (!a53_node)
 			return NULL;
 		pl->nodes[pl->n_nodes++] = a53_node;
