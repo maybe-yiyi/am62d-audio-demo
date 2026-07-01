@@ -12,3 +12,10 @@ test('yamnet_dsp',
         include_directories: plugin_inc,
         dependencies: [libm_dep],
         c_args: ['-std=c11']))
+
+# Integration test: compile yamnet.c directly, mock TFLite via absent HAVE_TFLITE
+test('yamnet_mock',
+    executable('test_yamnet_mock', 'test_yamnet_mock.c',
+        include_directories: plugin_inc,
+        dependencies: [thread_dep, libm_dep],
+        c_args: ['-std=c11']))
