@@ -2,3 +2,8 @@ option('plugins',
   type: 'array',
   value: ['passthrough', 'webrtc', 'yamnet'],
   description: 'Plugins to build')
+
+option('yamnet_model',
+  type: 'string',
+  value: '',
+  description: 'Path to yamnet.tflite model file; installed alongside the plugin when set')

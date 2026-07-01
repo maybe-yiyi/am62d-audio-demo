@@ -18,6 +18,13 @@ executable('am62d-pipeline',
 webrtc_dep = dependency('webrtc-audio-processing-2', required: false)
 tflite_dep = dependency('tensorflow2-lite', required: false)
 
+_yamnet_model = get_option('yamnet_model')
+if _yamnet_model != ''
+  install_data(_yamnet_model,
+    rename: 'yamnet.tflite',
+    install_dir: '/usr/lib/am62d/plugins')
+endif
+
 plugin_configs = {
   'passthrough': { 'sources': ['plugins/passthrough.c'], 'deps': [] },
   'webrtc': { 'sources': ['plugins/webrtc.cpp'], 'deps': [webrtc_dep] },
@@ -54,7 +61,7 @@ foreach plugin : plugins
   )
 endforeach
 
-install_data('plugins/manifest.ttl', 'plugins/passthrough.ttl', 'plugins/webrtc.ttl',
+install_data('plugins/manifest.ttl', 'plugins/passthrough.ttl', 'plugins/webrtc.ttl', 'plugins/yamnet.ttl',
   install_dir: '/usr/lib/am62d/plugins')
 
 install_subdir('configs/', install_dir: '/usr/lib/am62d/')

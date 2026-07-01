@@ -12,3 +12,16 @@ test('yamnet_dsp',
         include_directories: plugin_inc,
         dependencies: [libm_dep],
         c_args: ['-std=c11']))
+
+if tflite_dep.found()
+    fs = import('fs')
+    _model = get_option('yamnet_model')
+    _bundle = _model != '' ? fs.parent(_model) : ''
+
+    test('yamnet_tflite',
+        executable('test_yamnet_tflite', 'test_yamnet_tflite.c',
+            include_directories: plugin_inc,
+            dependencies: [thread_dep, libm_dep, tflite_dep],
+            c_args: ['-std=c11', '-DYAMNET_BUNDLE_PATH="' + _bundle + '"']),
+        timeout: 120)
+endif
