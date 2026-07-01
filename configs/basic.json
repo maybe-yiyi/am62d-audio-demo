@@ -1,7 +1,7 @@
 {
   "name": "passthrough",
   "nodes": [
-    { "id": "pt", "plugin": "passthrough", "config": {} }
+    { "id": "pt", "plugin": "urn:am62d:passthrough" }
   ],
   "links": [
     { "from": "pw-play:output_FL", "to": "pt:in_l" },

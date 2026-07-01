@@ -3,8 +3,6 @@ project('am62d-pipeline', ['c', 'cpp'],
 
 add_project_arguments('-D_GNU_SOURCE', language: 'c')
 
-inc = include_directories('framework/include')
-
 subdir('framework/core')
 subdir('third_party/cjson')
 
@@ -14,7 +12,6 @@ lilv_dep = dependency('lilv-0')
 
 executable('am62d-pipeline',
   framework_src,
-  include_directories: inc,
   dependencies: [dependency('libpipewire-0.3'), dl_dep, cjson_dep, lilv_dep]
 )
 
@@ -43,7 +40,6 @@ foreach plugin : plugins
 
   shared_module('am62d_' + plugin,
     cfg['sources'],
-    include_directories: inc,
     dependencies: cfg['deps'],
     c_args: ['-fvisibility=hidden'],
     cpp_args: ['-fvisibility=hidden'],
