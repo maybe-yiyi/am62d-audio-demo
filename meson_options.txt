@@ -1,6 +1,6 @@
 option('plugins',
   type: 'array',
-  value: ['passthrough', 'webrtc', 'yamnet'],
+  value: ['passthrough', 'webrtc', 'downmix', 'yamnet'],
   description: 'Plugins to build')
 
 option('yamnet_model',

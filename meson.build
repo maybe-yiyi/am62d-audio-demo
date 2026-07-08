@@ -25,9 +25,13 @@ if _yamnet_model != ''
     install_dir: '/usr/lib/am62d/plugins')
 endif
 
+max_channels = get_option('max_channels')
+channel_args = ['-DAM62D_MAX_CHANNELS=' + max_channels.to_string()]
+
 plugin_configs = {
   'passthrough': { 'sources': ['plugins/passthrough.c'], 'deps': [] },
-  'webrtc': { 'sources': ['plugins/webrtc.cpp'], 'deps': [webrtc_dep] },
+  'webrtc': { 'sources': ['plugins/webrtc.cpp'], 'deps': [webrtc_dep], 'cpp_args': channel_args },
+  'downmix': { 'sources': ['plugins/downmix.c'], 'deps': [], 'c_args': channel_args },
   'yamnet': {
     'sources': ['plugins/yamnet.c'],
     'deps': [tflite_dep],
@@ -61,7 +65,8 @@ foreach plugin : plugins
   )
 endforeach
 
-install_data('plugins/manifest.ttl', 'plugins/passthrough.ttl', 'plugins/webrtc.ttl', 'plugins/yamnet.ttl',
+install_data('plugins/manifest.ttl', 'plugins/passthrough.ttl',
+  'plugins/webrtc.ttl', 'plugins/downmix.ttl', 'plugins/yamnet.ttl',
   install_dir: '/usr/lib/am62d/plugins')
 
 install_subdir('configs/', install_dir: '/usr/lib/am62d/')
