@@ -1,6 +1,7 @@
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include <pipewire/pipewire.h>
 
@@ -211,6 +212,29 @@ static const struct pw_core_events core_events = {
 	.done = on_core_done,
 };
 
+static int collect_linked_ports(struct pipeline_config *config, const char *node_id,
+		const char *out[], int max_out)
+{
+	int n = 0;
+	for (int i = 0; i < config->n_links; i++) {
+		char link_node[128];
+		char link_port[128];
+
+		if (n < max_out &&
+			sscanf(config->links[i].from, "%127[^:]:%127s", link_node, link_port) == 2 &&
+			strcmp(link_node, node_id) == 0) {
+			out[n++] = config->links[i].from + strlen(link_node) + 1;
+		}
+
+		if (n < max_out &&
+			sscanf(config->links[i].to, "%127[^:]:%127s", link_node, link_port) == 2 &&
+			strcmp(link_node, node_id) == 0) {
+			out[n++] = config->links[i].to + strlen(link_node) + 1;
+		}
+	}
+	return n;
+}
+
 struct pipeline *pipeline_create(const char *config_path, const char *plugin_dir)
 {
 	struct pipeline *pl = pipewire_setup();
@@ -229,8 +253,13 @@ struct pipeline *pipeline_create(const char *config_path, const char *plugin_dir
 		LilvInstance *instance = registry_get(node_conf.plugin);
 		const LilvPlugin *plugin = registry_get_plugin(node_conf.plugin);
 
+		const char *linked_ports[MAX_LINKS * 2];
+		int n_linked_ports = collect_linked_ports(pl->config, node_conf.id,
+						linked_ports, MAX_LINKS * 2);
+
 		struct a53_node *a53_node = a53_node_create(pl->core, registry_world(),
-						plugin, instance, node_conf.id);
+						plugin, instance, node_conf.id,
+						linked_ports, n_linked_ports);
 		if (!a53_node)
 			return NULL;
 		pl->nodes[pl->n_nodes++] = a53_node;
