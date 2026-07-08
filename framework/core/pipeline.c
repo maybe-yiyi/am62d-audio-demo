@@ -60,9 +60,9 @@ static void pipeline_wire_control_links(struct pipeline *pl)
 	for (int i = 0; i < pl->config->n_ctrl_links; i++) {
 		const struct control_link_config *clc = &pl->config->ctrl_links[i];
 
-		char src_node_id[64];
-		char src_port_name[64];
-		if (sscanf(clc->from, "%63[^:]:%63s", src_node_id, src_port_name) != 2) {
+		char src_node_id[128];
+		char src_port_name[128];
+		if (sscanf(clc->from, "%127[^:]:%127s", src_node_id, src_port_name) != 2) {
 			fprintf(stderr, "pipeline: malformed control link 'from': %s\n",
 				clc->from);
 			continue;
@@ -90,13 +90,13 @@ static void pipeline_create_links(struct pipeline *pl)
 	for (int i = 0; i < pl->config->n_links; i++) {
 		struct link_config link = pl->config->links[i];
 
-		char from_node[64];
-		char from_port[64];
-		char to_node[64];
-		char to_port[64];
+		char from_node[128];
+		char from_port[128];
+		char to_node[128];
+		char to_port[128];
 
-		if (sscanf(link.from, "%63[^:]:%63s", from_node, from_port) != 2 ||
-			sscanf(link.to, "%63[^:]:%63s", to_node, to_port) != 2) {
+		if (sscanf(link.from, "%127[^:]:%127s", from_node, from_port) != 2 ||
+			sscanf(link.to, "%127[^:]:%127s", to_node, to_port) != 2) {
 			fprintf(stderr, "pipeline: malformed link '%s' -> '%s'\n",
 				link.from, link.to);
 			continue;
