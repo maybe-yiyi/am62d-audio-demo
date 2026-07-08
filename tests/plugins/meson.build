@@ -13,6 +13,19 @@ test('yamnet_dsp',
         dependencies: [libm_dep],
         c_args: ['-std=c11']))
 
+test('downmix',
+    executable('test_downmix', 'test_downmix.c',
+        include_directories: plugin_inc,
+        c_args: ['-std=c11', '-DAM62D_MAX_CHANNELS=' + max_channels.to_string()]))
+
+if webrtc_dep.found()
+    test('webrtc_channels',
+        executable('test_webrtc_channels', 'test_webrtc_channels.cpp',
+            include_directories: plugin_inc,
+            dependencies: [webrtc_dep],
+            cpp_args: ['-std=c++17', '-DAM62D_MAX_CHANNELS=' + max_channels.to_string()]))
+endif
+
 if tflite_dep.found()
     fs = import('fs')
     _model = get_option('yamnet_model')
