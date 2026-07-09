@@ -149,8 +149,10 @@ static void pipeline_record_node_id(struct pipeline *pl, const char *config_id, 
 static void pipeline_record_port_id(struct pipeline *pl, uint32_t pw_node_id,
 	const char *port_name, uint32_t pw_port_id)
 {
-	if (pl->n_port_ids >= MAX_NODE_PORTS)
+	if (pl->n_port_ids >= MAX_NODE_PORTS) {
+		fprintf(stderr, "pipeline: port table full, dropping port '%s'\n", port_name);
 		return;
+	}
 
 	snprintf(pl->port_ids[pl->n_port_ids].port_name,
 		sizeof(pl->port_ids[0].port_name), "%s", port_name);
