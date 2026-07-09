@@ -16,6 +16,8 @@ executable('am62d-pipeline',
 )
 
 webrtc_dep = dependency('webrtc-audio-processing-2', required: false)
+tflite_dep = dependency('tensorflow2-lite', required: false)
+
 plugin_configs = {
   'passthrough': { 'sources': ['plugins/passthrough.c'], 'deps': [] },
   'webrtc': { 'sources': ['plugins/webrtc.cpp'], 'deps': [webrtc_dep] },
@@ -41,8 +43,8 @@ foreach plugin : plugins
   shared_module('am62d_' + plugin,
     cfg['sources'],
     dependencies: cfg['deps'],
-    c_args: ['-fvisibility=hidden'],
-    cpp_args: ['-fvisibility=hidden'],
+    c_args: ['-fvisibility=hidden'] + cfg.get('c_args', []),
+    cpp_args: ['-fvisibility=hidden'] + cfg.get('cpp_args', []),
     install: true,
     install_dir: '/usr/lib/am62d/plugins',
   )
