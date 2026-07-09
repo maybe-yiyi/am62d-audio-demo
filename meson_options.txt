@@ -1,4 +1,14 @@
 option('plugins',
   type: 'array',
-  value: ['passthrough', 'webrtc'],
+  value: ['passthrough', 'webrtc', 'downmix', 'yamnet'],
   description: 'Plugins to build')
+
+option('yamnet_model',
+  type: 'string',
+  value: '',
+  description: 'Path to yamnet.tflite model file; installed alongside the plugin when set')
+
+option('max_channels',
+  type: 'integer',
+  value: 8,
+  description: 'Max audio channels for webrtc/downmix connectionOptional ports')

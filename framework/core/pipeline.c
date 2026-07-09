@@ -1,6 +1,7 @@
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include <pipewire/pipewire.h>
 
@@ -60,9 +61,9 @@ static void pipeline_wire_control_links(struct pipeline *pl)
 	for (int i = 0; i < pl->config->n_ctrl_links; i++) {
 		const struct control_link_config *clc = &pl->config->ctrl_links[i];
 
-		char src_node_id[64];
-		char src_port_name[64];
-		if (sscanf(clc->from, "%63[^:]:%63s", src_node_id, src_port_name) != 2) {
+		char src_node_id[128];
+		char src_port_name[128];
+		if (sscanf(clc->from, "%127[^:]:%127s", src_node_id, src_port_name) != 2) {
 			fprintf(stderr, "pipeline: malformed control link 'from': %s\n",
 				clc->from);
 			continue;
@@ -90,13 +91,13 @@ static void pipeline_create_links(struct pipeline *pl)
 	for (int i = 0; i < pl->config->n_links; i++) {
 		struct link_config link = pl->config->links[i];
 
-		char from_node[64];
-		char from_port[64];
-		char to_node[64];
-		char to_port[64];
+		char from_node[128];
+		char from_port[128];
+		char to_node[128];
+		char to_port[128];
 
-		if (sscanf(link.from, "%63[^:]:%63s", from_node, from_port) != 2 ||
-			sscanf(link.to, "%63[^:]:%63s", to_node, to_port) != 2) {
+		if (sscanf(link.from, "%127[^:]:%127s", from_node, from_port) != 2 ||
+			sscanf(link.to, "%127[^:]:%127s", to_node, to_port) != 2) {
 			fprintf(stderr, "pipeline: malformed link '%s' -> '%s'\n",
 				link.from, link.to);
 			continue;
@@ -148,8 +149,10 @@ static void pipeline_record_node_id(struct pipeline *pl, const char *config_id, 
 static void pipeline_record_port_id(struct pipeline *pl, uint32_t pw_node_id,
 	const char *port_name, uint32_t pw_port_id)
 {
-	if (pl->n_port_ids >= MAX_NODE_PORTS)
+	if (pl->n_port_ids >= MAX_NODE_PORTS) {
+		fprintf(stderr, "pipeline: port table full, dropping port '%s'\n", port_name);
 		return;
+	}
 
 	snprintf(pl->port_ids[pl->n_port_ids].port_name,
 		sizeof(pl->port_ids[0].port_name), "%s", port_name);
@@ -211,6 +214,29 @@ static const struct pw_core_events core_events = {
 	.done = on_core_done,
 };
 
+static int collect_linked_ports(struct pipeline_config *config, const char *node_id,
+		const char *out[], int max_out)
+{
+	int n = 0;
+	for (int i = 0; i < config->n_links; i++) {
+		char link_node[128];
+		char link_port[128];
+
+		if (n < max_out &&
+			sscanf(config->links[i].from, "%127[^:]:%127s", link_node, link_port) == 2 &&
+			strcmp(link_node, node_id) == 0) {
+			out[n++] = config->links[i].from + strlen(link_node) + 1;
+		}
+
+		if (n < max_out &&
+			sscanf(config->links[i].to, "%127[^:]:%127s", link_node, link_port) == 2 &&
+			strcmp(link_node, node_id) == 0) {
+			out[n++] = config->links[i].to + strlen(link_node) + 1;
+		}
+	}
+	return n;
+}
+
 struct pipeline *pipeline_create(const char *config_path, const char *plugin_dir)
 {
 	struct pipeline *pl = pipewire_setup();
@@ -229,8 +255,13 @@ struct pipeline *pipeline_create(const char *config_path, const char *plugin_dir
 		LilvInstance *instance = registry_get(node_conf.plugin);
 		const LilvPlugin *plugin = registry_get_plugin(node_conf.plugin);
 
+		const char *linked_ports[MAX_LINKS * 2];
+		int n_linked_ports = collect_linked_ports(pl->config, node_conf.id,
+						linked_ports, MAX_LINKS * 2);
+
 		struct a53_node *a53_node = a53_node_create(pl->core, registry_world(),
-						plugin, instance, node_conf.id);
+						plugin, instance, node_conf.id,
+						linked_ports, n_linked_ports);
 		if (!a53_node)
 			return NULL;
 		pl->nodes[pl->n_nodes++] = a53_node;

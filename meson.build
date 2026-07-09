@@ -16,9 +16,26 @@ executable('am62d-pipeline',
 )
 
 webrtc_dep = dependency('webrtc-audio-processing-2', required: false)
+tflite_dep = dependency('tensorflow2-lite', required: false)
+
+_yamnet_model = get_option('yamnet_model')
+if _yamnet_model != ''
+  install_data(_yamnet_model,
+    rename: 'yamnet.tflite',
+    install_dir: '/usr/lib/am62d/plugins')
+endif
+
+max_channels = get_option('max_channels')
+channel_args = ['-DAM62D_MAX_CHANNELS=' + max_channels.to_string()]
+
 plugin_configs = {
   'passthrough': { 'sources': ['plugins/passthrough.c'], 'deps': [] },
-  'webrtc': { 'sources': ['plugins/webrtc.cpp'], 'deps': [webrtc_dep] },
+  'webrtc': { 'sources': ['plugins/webrtc.cpp'], 'deps': [webrtc_dep], 'cpp_args': channel_args },
+  'downmix': { 'sources': ['plugins/downmix.c'], 'deps': [], 'c_args': channel_args },
+  'yamnet': {
+    'sources': ['plugins/yamnet.c'],
+    'deps': [tflite_dep],
+  },
 }
 
 plugins = get_option('plugins')
@@ -41,14 +58,17 @@ foreach plugin : plugins
   shared_module('am62d_' + plugin,
     cfg['sources'],
     dependencies: cfg['deps'],
-    c_args: ['-fvisibility=hidden'],
-    cpp_args: ['-fvisibility=hidden'],
+    c_args: ['-fvisibility=hidden'] + cfg.get('c_args', []),
+    cpp_args: ['-fvisibility=hidden'] + cfg.get('cpp_args', []),
     install: true,
     install_dir: '/usr/lib/am62d/plugins',
   )
 endforeach
 
-install_data('plugins/manifest.ttl', 'plugins/passthrough.ttl', 'plugins/webrtc.ttl',
+install_data('plugins/manifest.ttl', 'plugins/passthrough.ttl',
+  'plugins/webrtc.ttl', 'plugins/downmix.ttl', 'plugins/yamnet.ttl',
   install_dir: '/usr/lib/am62d/plugins')
 
 install_subdir('configs/', install_dir: '/usr/lib/am62d/')
+
+subdir('tests')

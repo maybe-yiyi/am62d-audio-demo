@@ -1,4 +1,6 @@
+#include <stdbool.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include <lv2/core/lv2.h>
 #include <pipewire/pipewire.h>
@@ -30,15 +32,26 @@ static const struct pw_filter_events filter_events = {
 	.process = on_process,
 };
 
+static bool port_is_linked(const char *sym, const char **linked_ports, int n_linked_ports)
+{
+	for (int i = 0; i < n_linked_ports; i++)
+		if (strcmp(sym, linked_ports[i]) == 0)
+			return true;
+	return false;
+}
+
 struct a53_node *a53_node_create(struct pw_core *core,
 				 LilvWorld *world,
 				 const LilvPlugin *plugin,
 				 LilvInstance *instance,
-				 const char *node_name)
+				 const char *node_name,
+				 const char **linked_ports,
+				 int n_linked_ports)
 {
 	LilvNode *audio_class = lilv_new_uri(world, LV2_CORE__AudioPort);
 	LilvNode *control_class = lilv_new_uri(world, LV2_CORE__ControlPort);
 	LilvNode *input_class = lilv_new_uri(world, LV2_CORE__InputPort);
+	LilvNode *optional_class = lilv_new_uri(world, LV2_CORE__connectionOptional);
 
 	struct a53_node *node = calloc(1, sizeof(struct a53_node));
 	if (!node)
@@ -67,9 +80,13 @@ struct a53_node *a53_node_create(struct pw_core *core,
 		bool is_audio = lilv_port_is_a(plugin, port, audio_class);
 		bool is_control = lilv_port_is_a(plugin, port, control_class);
 		bool is_input = lilv_port_is_a(plugin, port, input_class);
+		bool is_optional = lilv_port_has_property(plugin, port, optional_class);
 		const char *sym = lilv_node_as_string(lilv_port_get_symbol(plugin, port));
 
 		if (is_audio) {
+			if (is_optional && !port_is_linked(sym, linked_ports, n_linked_ports))
+				continue;
+
 			if (is_input && node->n_in >= MAX_PORTS)
 				goto destroy_filter;
 			if (!is_input && node->n_out >= MAX_PORTS)
@@ -97,7 +114,7 @@ struct a53_node *a53_node_create(struct pw_core *core,
 				node->n_out++;
 			}
 		} else if (is_control) {
-			if (node->n_ctrl >= MAX_PORTS)
+			if (node->n_ctrl >= MAX_CTRL_PORTS)
 				goto destroy_filter;
 			node->ctrl_bufs[node->n_ctrl] = 0.0f;
 			lilv_instance_connect_port(instance, i,
@@ -117,6 +134,7 @@ struct a53_node *a53_node_create(struct pw_core *core,
 	lilv_node_free(audio_class);
 	lilv_node_free(control_class);
 	lilv_node_free(input_class);
+	lilv_node_free(optional_class);
 	return node;
 
 destroy_filter:
@@ -127,6 +145,7 @@ exit:
 	lilv_node_free(audio_class);
 	lilv_node_free(control_class);
 	lilv_node_free(input_class);
+	lilv_node_free(optional_class);
 	return NULL;
 }
 

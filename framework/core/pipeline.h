@@ -6,16 +6,16 @@
 #include "a53_node.h"
 #include "config.h"
 
-#define MAX_NODE_PORTS 64
+#define MAX_NODE_PORTS 256
 
 struct node_id_entry {
-	char config_id[64];
+	char config_id[128];
 	uint32_t pw_node_id;
 };
 
 struct port_id_entry {
 	uint32_t pw_node_id;
-	char port_name[64];
+	char port_name[128];
 	uint32_t pw_port_id;
 };
 
