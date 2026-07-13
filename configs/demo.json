@@ -6,7 +6,15 @@
       "plugin": "urn:am62d:webrtc"
     },
     {
-      "id": "downmix",
+      "id": "downmix_l",
+      "plugin": "urn:am62d:downmix"
+    },
+    {
+      "id": "downmix_r",
+      "plugin": "urn:am62d:downmix"
+    },
+    {
+      "id": "downmix_yamnet",
       "plugin": "urn:am62d:downmix"
     },
     {
@@ -16,39 +24,55 @@
   ],
   "links": [
     {
-      "from": "alsa_input.platform-sound.pro-input-0:capture_AUX0",
+      "from": "alsa_audio_source:capture_FL",
       "to": "webrtc:in_ch0"
     },
     {
-      "from": "alsa_input.platform-sound.pro-input-0:capture_AUX1",
+      "from": "alsa_audio_source:capture_FR",
       "to": "webrtc:in_ch1"
     },
     {
-      "from": "alsa_input.platform-sound.pro-input-0:capture_AUX2",
+      "from": "alsa_audio_source:capture_RL",
       "to": "webrtc:in_ch2"
     },
     {
-      "from": "alsa_input.platform-sound.pro-input-0:capture_AUX3",
+      "from": "alsa_audio_source:capture_RR",
       "to": "webrtc:in_ch3"
     },
     {
       "from": "webrtc:out_ch0",
-      "to": "downmix:in_ch0"
+      "to": "downmix_l:in_ch0"
     },
     {
       "from": "webrtc:out_ch1",
-      "to": "downmix:in_ch1"
+      "to": "downmix_l:in_ch1"
     },
     {
       "from": "webrtc:out_ch2",
-      "to": "downmix:in_ch2"
+      "to": "downmix_r:in_ch0"
     },
     {
       "from": "webrtc:out_ch3",
-      "to": "downmix:in_ch3"
+      "to": "downmix_r:in_ch1"
     },
     {
-      "from": "downmix:out",
+      "from": "downmix_l:out",
+      "to": "alsa_audio_sink:playback_FL"
+    },
+    {
+      "from": "downmix_r:out",
+      "to": "alsa_audio_sink:playback_RL"
+    },
+    {
+      "from": "downmix_l:out",
+      "to": "downmix_yamnet:in_ch0"
+    },
+    {
+      "from": "downmix_r:out",
+      "to": "downmix_yamnet:in_ch1"
+    },
+    {
+      "from": "downmix_yamnet:out",
       "to": "yamnet:in"
     }
   ]
