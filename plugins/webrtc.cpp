@@ -1,5 +1,6 @@
 #include <string.h>
 #include <memory>
+#include <cmath>
 
 #include <lv2/core/lv2.h>
 
@@ -30,6 +31,8 @@ struct priv {
 	uint32_t out_avail;
 	uint32_t out_pos;
 	int n_active;
+
+	float gate_gain[AM62D_MAX_CHANNELS];
 };
 
 static NSLevel map_level(int v)
@@ -54,16 +57,6 @@ static rtc::scoped_refptr<webrtc::AudioProcessing> make_apm(NSLevel level, bool 
 
 	webrtc::AudioProcessing::Config apm_cfg;
 
-	apm_cfg.gain_controller2.enabled = true;
-	apm_cfg.gain_controller2.input_volume_controller.enabled = true;
-	apm_cfg.gain_controller2.fixed_digital.gain_db = 0.0f;
-	apm_cfg.gain_controller2.adaptive_digital.enabled = true;
-	apm_cfg.gain_controller2.adaptive_digital.headroom_db = 3.0f;
-	apm_cfg.gain_controller2.adaptive_digital.max_gain_db = 20.0f;
-	apm_cfg.gain_controller2.adaptive_digital.initial_gain_db = 6.0f;
-	apm_cfg.gain_controller2.adaptive_digital.max_gain_change_db_per_second = 3.0f;
-	apm_cfg.gain_controller2.adaptive_digital.max_output_noise_level_dbfs = -50.0f;
-
 	apm_cfg.noise_suppression.enabled = true;
 	apm_cfg.noise_suppression.level = level;
 
@@ -71,11 +64,34 @@ static rtc::scoped_refptr<webrtc::AudioProcessing> make_apm(NSLevel level, bool 
 
 	apm_cfg.transient_suppression.enabled = true;
 
-	apm_cfg.pipeline.multi_channel_capture = multi_channel;
-
 	apm->ApplyConfig(apm_cfg);
 
 	return apm;
+}
+
+#define GATE_THRESHOLD 0.00316f
+#define GATE_ATTACK    0.90f
+#define GATE_RELEASE   0.05f
+
+static void gate_frame(float out[][WEBRTC_FRAMES], int n_ch,
+		       float *gate_gain, int n_signal)
+{
+	for (int ch = 0; ch < n_ch; ch++) {
+		float sum_sq = 0.0f;
+		for (int i = 0; i < n_signal; i++)
+			sum_sq += out[ch][i] * out[ch][i];
+		float rms = n_signal > 0 ? sqrtf(sum_sq / n_signal) : 0.0f;
+
+		float target = rms >= GATE_THRESHOLD ? 1.0f : 0.0f;
+		float coeff = target > gate_gain[ch] ? GATE_ATTACK : GATE_RELEASE;
+		float new_gain = gate_gain[ch] + coeff * (target - gate_gain[ch]);
+
+		float g0 = gate_gain[ch];
+		float dg = (new_gain - g0) / WEBRTC_FRAMES;
+		for (int i = 0; i < WEBRTC_FRAMES; i++)
+			out[ch][i] *= g0 + i * dg;
+		gate_gain[ch] = new_gain;
+	}
 }
 
 static void activate(LV2_Handle instance)
@@ -86,6 +102,8 @@ static void activate(LV2_Handle instance)
 	p->out_avail = 0;
 	p->out_pos = 0;
 	p->apm = nullptr;
+	for (int i = 0; i < AM62D_MAX_CHANNELS; i++)
+		p->gate_gain[i] = 0.0f;
 }
 
 static LV2_Handle instantiate(const LV2_Descriptor *descriptor,
@@ -138,6 +156,10 @@ static void run(LV2_Handle instance, uint32_t n_samples)
 	if (p->n_active <= 0 || !p->apm)
 		return;
 
+	for (int ch = 0; ch < p->n_active; ch++)
+		if (p->out_bufs[ch])
+			memset(p->out_bufs[ch], 0, n_samples * sizeof(float));
+
 	uint32_t consumed = 0;
 	uint32_t produced = 0;
 
@@ -173,10 +195,31 @@ static void run(LV2_Handle instance, uint32_t n_samples)
 				dst[ch] = p->out_stage[ch];
 			}
 			p->apm->ProcessStream(src, p->cfg, p->cfg, dst);
+			gate_frame(p->out_stage, p->n_active, p->gate_gain, WEBRTC_FRAMES);
 			p->in_fill = 0;
 			p->out_avail = WEBRTC_FRAMES;
 			p->out_pos = 0;
 		}
+	}
+
+	if (produced < n_samples && p->in_fill > 0) {
+		uint32_t to_emit = n_samples - produced;
+		uint32_t real = p->in_fill;
+		for (int ch = 0; ch < p->n_active; ch++)
+			memset(p->in_stage[ch] + real, 0, (WEBRTC_FRAMES - real) * sizeof(float));
+		const float *src[AM62D_MAX_CHANNELS];
+		float *dst[AM62D_MAX_CHANNELS];
+		for (int ch = 0; ch < p->n_active; ch++) {
+			src[ch] = p->in_stage[ch];
+			dst[ch] = p->out_stage[ch];
+		}
+		p->apm->ProcessStream(src, p->cfg, p->cfg, dst);
+		gate_frame(p->out_stage, p->n_active, p->gate_gain, real);
+		for (int ch = 0; ch < p->n_active; ch++)
+			memcpy(p->out_bufs[ch] + produced, p->out_stage[ch], to_emit * sizeof(float));
+		p->out_avail = WEBRTC_FRAMES - to_emit;
+		p->out_pos = to_emit;
+		p->in_fill = 0;
 	}
 }
 
