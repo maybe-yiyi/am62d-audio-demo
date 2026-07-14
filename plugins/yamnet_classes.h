@@ -39,7 +39,7 @@ static inline void yamnet_init_class_buckets(uint8_t cb[AUDIOSET_CLASSES])
 	cb[304] = BUCKET_ALERT; /* Car alarm */
 	cb[317] = BUCKET_ALERT; /* Police car (siren) */
 	cb[318] = BUCKET_ALERT; /* Ambulance (siren) */
-	cb[319] = BUCKET_ALERT; /* Fire engine siren */
+	cb[319] = BUCKET_ALERT; /* Fire engine, fire truck (siren) */
 	cb[349] = BUCKET_ALERT; /* Doorbell */
 	cb[350] = BUCKET_ALERT; /* Ding-dong */
 	cb[353] = BUCKET_ALERT; /* Knock */
@@ -54,6 +54,8 @@ static inline void yamnet_init_class_buckets(uint8_t cb[AUDIOSET_CLASSES])
 	cb[393] = BUCKET_ALERT; /* Smoke detector, smoke alarm */
 	cb[394] = BUCKET_ALERT; /* Fire alarm */
 	cb[475] = BUCKET_ALERT; /* Beep, bleep */
+	cb[476] = BUCKET_ALERT; /* Ping */
+	cb[477] = BUCKET_ALERT; /* Ding */
 
 	/* BUCKET_LAUGH (2) */
 	cb[13] = BUCKET_LAUGH; /* Laughter */
@@ -73,15 +75,18 @@ static inline void yamnet_init_class_buckets(uint8_t cb[AUDIOSET_CLASSES])
 	cb[279] = BUCKET_HVAC; /* Wind noise (microphone) */
 	cb[406] = BUCKET_HVAC; /* Mechanical fan */
 	cb[407] = BUCKET_HVAC; /* Air conditioning */
+	cb[482] = BUCKET_HVAC; /* Whir */
 	cb[490] = BUCKET_HVAC; /* Hum */
-	cb[510] = BUCKET_HVAC; /* Environment noise */
-	cb[514] = BUCKET_HVAC; /* Sidetone */
+	cb[508] = BUCKET_HVAC; /* Environmental noise */
+	cb[510] = BUCKET_HVAC; /* Mains hum */
+	cb[514] = BUCKET_HVAC; /* White noise */
 	cb[515] = BUCKET_HVAC; /* Pink noise */
 
 	/* BUCKET_NOISE (5) */
 	cb[283] = BUCKET_NOISE; /* Rain */
 	cb[321] = BUCKET_NOISE; /* Traffic noise, roadway noise */
 	cb[337] = BUCKET_NOISE; /* Engine */
+	cb[509] = BUCKET_NOISE; /* Static */
 
 	/* BUCKET_DOOR (6) */
 	cb[348] = BUCKET_DOOR; /* Door */
@@ -97,9 +102,11 @@ static inline void yamnet_init_class_buckets(uint8_t cb[AUDIOSET_CLASSES])
 	cb[378] = BUCKET_TYPING; /* Typing */
 	cb[379] = BUCKET_TYPING; /* Typewriter */
 	cb[380] = BUCKET_TYPING; /* Computer keyboard */
+	cb[381] = BUCKET_TYPING; /* Writing */
+	cb[485] = BUCKET_TYPING; /* Clicking */
+	cb[486] = BUCKET_TYPING; /* Clickety-clack */
 
 	/* BUCKET_APPLAUSE (9) */
-	cb[56] = BUCKET_APPLAUSE; /* Hands */
 	cb[57] = BUCKET_APPLAUSE; /* Finger snapping */
 	cb[58] = BUCKET_APPLAUSE; /* Clapping */
 	cb[61] = BUCKET_APPLAUSE; /* Cheering */
