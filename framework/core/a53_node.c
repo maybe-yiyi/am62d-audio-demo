@@ -8,20 +8,37 @@
 #include "a53_node.h"
 #include "param_bus.h"
 
+/* silence_buf: read-only zeros for NULL input port fallback
+ * scratch_buf: writable discard buffer for NULL output port fallback */
+static const float silence_buf[8192];
+static float scratch_buf[8192];
+
 static void on_process(void *data, struct spa_io_position *pos)
 {
 	struct a53_node *node = data;
 	uint32_t n_frames = pos->clock.duration;
 
-	for (int i = 0; i < node->n_in; i++)
+	for (int i = 0; i < node->n_in; i++) {
+		void *buf = pw_filter_get_dsp_buffer(node->in_ports[i], n_frames);
+		if (!buf) {
+			pw_log_error("[%s] in port %d: NULL buffer from pw_filter_get_dsp_buffer",
+				pw_filter_get_name(node->filter), i);
+		}
 		lilv_instance_connect_port(node->instance,
 				node->in_port_indices[i],
-				pw_filter_get_dsp_buffer(node->in_ports[i], n_frames));
+				buf ? buf : (void *)silence_buf);
+	}
 
-	for (int i = 0; i < node->n_out; i++)
+	for (int i = 0; i < node->n_out; i++) {
+		void *buf = pw_filter_get_dsp_buffer(node->out_ports[i], n_frames);
+		if (!buf) {
+			pw_log_error("[%s] out port %d: NULL buffer from pw_filter_get_dsp_buffer",
+				pw_filter_get_name(node->filter), i);
+		}
 		lilv_instance_connect_port(node->instance,
 				node->out_port_indices[i],
-				pw_filter_get_dsp_buffer(node->out_ports[i], n_frames));
+				buf ? buf : (void *)scratch_buf);
+	}
 
 	lilv_instance_run(node->instance, n_frames);
 	param_bus_dispatch(node);
