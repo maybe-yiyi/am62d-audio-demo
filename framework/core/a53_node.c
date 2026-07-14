@@ -135,7 +135,17 @@ struct a53_node *a53_node_create(struct pw_core *core,
 		} else if (is_control) {
 			if (node->n_ctrl >= MAX_CTRL_PORTS)
 				goto destroy_filter;
-			node->ctrl_bufs[node->n_ctrl] = 0.0f;
+			LilvNode *def = NULL;
+			lilv_port_get_range(plugin, port, &def, NULL, NULL);
+			float default_val = 0.0f;
+			if (def) {
+				if (lilv_node_is_float(def))
+					default_val = lilv_node_as_float(def);
+				else if (lilv_node_is_int(def))
+					default_val = (float)lilv_node_as_int(def);
+			}
+			lilv_node_free(def);
+			node->ctrl_bufs[node->n_ctrl] = default_val;
 			lilv_instance_connect_port(instance, i,
 					&node->ctrl_bufs[node->n_ctrl]);
 			node->n_ctrl++;
