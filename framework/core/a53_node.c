@@ -101,8 +101,10 @@ struct a53_node *a53_node_create(struct pw_core *core,
 		const char *sym = lilv_node_as_string(lilv_port_get_symbol(plugin, port));
 
 		if (is_audio) {
-			if (is_optional && !port_is_linked(sym, linked_ports, n_linked_ports))
+			if (is_optional && !port_is_linked(sym, linked_ports, n_linked_ports)) {
+				lilv_instance_connect_port(instance, i, NULL);
 				continue;
+			}
 
 			if (is_input && node->n_in >= MAX_PORTS)
 				goto destroy_filter;
