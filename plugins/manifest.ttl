@@ -20,3 +20,8 @@
 	a lv2:Plugin ;
 	lv2:binary <libam62d_yamnet.so> ;
 	rdfs:seeAlso <yamnet.ttl> .
+
+<urn:am62d:stt>
+	a lv2:Plugin ;
+	lv2:binary <libam62d_stt.so> ;
+	rdfs:seeAlso <stt.ttl> .

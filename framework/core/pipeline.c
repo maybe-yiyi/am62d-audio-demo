@@ -247,20 +247,22 @@ struct pipeline *pipeline_create(const char *config_path, const char *plugin_dir
 	printf("Loading configuration %s\n", pl->config->name);
 
 	registry_init(plugin_dir);
+	param_bus_init();
 
 	for (int i = 0; i < pl->config->n_nodes; i++) {
 		struct node_config node_conf = pl->config->nodes[i];
 		printf("Loading node %s\n", node_conf.id);
 
-		LilvInstance *instance = registry_get(node_conf.plugin);
 		const LilvPlugin *plugin = registry_get_plugin(node_conf.plugin);
+		if (!plugin)
+			return NULL;
 
 		const char *linked_ports[MAX_LINKS * 2];
 		int n_linked_ports = collect_linked_ports(pl->config, node_conf.id,
 						linked_ports, MAX_LINKS * 2);
 
 		struct a53_node *a53_node = a53_node_create(pl->core, registry_world(),
-						plugin, instance, node_conf.id,
+						plugin, node_conf.id,
 						linked_ports, n_linked_ports);
 		if (!a53_node)
 			return NULL;
@@ -297,6 +299,7 @@ void pipeline_destroy(struct pipeline *pl)
 	for (int i = 0; i < pl->n_nodes; i++)
 		a53_node_destroy(pl->nodes[i]);
 
+	param_bus_reset();
 	registry_destroy();
 
 	pw_proxy_destroy((struct pw_proxy *)pl->registry);

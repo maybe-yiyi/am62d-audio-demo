@@ -1,0 +1,75 @@
+{
+  "name": "stt",
+  "nodes": [
+    {
+      "id": "webrtc",
+      "plugin": "urn:am62d:webrtc"
+    },
+    {
+      "id": "downmix",
+      "plugin": "urn:am62d:downmix"
+    },
+    {
+      "id": "yamnet",
+      "plugin": "urn:am62d:yamnet"
+    },
+    {
+      "id": "stt",
+      "plugin": "urn:am62d:stt"
+    }
+  ],
+  "links": [
+    {
+      "from": "alsa_input.platform-sound.pro-input-0:capture_AUX0",
+      "to": "webrtc:in_ch0"
+    },
+    {
+      "from": "alsa_input.platform-sound.pro-input-0:capture_AUX1",
+      "to": "webrtc:in_ch1"
+    },
+    {
+      "from": "alsa_input.platform-sound.pro-input-0:capture_AUX2",
+      "to": "webrtc:in_ch2"
+    },
+    {
+      "from": "alsa_input.platform-sound.pro-input-0:capture_AUX3",
+      "to": "webrtc:in_ch3"
+    },
+    {
+      "from": "webrtc:out_ch0",
+      "to": "downmix:in_ch0"
+    },
+    {
+      "from": "webrtc:out_ch1",
+      "to": "downmix:in_ch1"
+    },
+    {
+      "from": "webrtc:out_ch2",
+      "to": "downmix:in_ch2"
+    },
+    {
+      "from": "webrtc:out_ch3",
+      "to": "downmix:in_ch3"
+    },
+    {
+      "from": "downmix:out",
+      "to": "yamnet:in"
+    },
+    {
+      "from": "downmix:out",
+      "to": "stt:in"
+    }
+  ],
+  "control_links": [
+    {
+      "from": "stt:confidence",
+      "to": "webrtc",
+      "param": "ns_level"
+    },
+    {
+      "from": "stt:hit",
+      "to": "yamnet",
+      "param": "command"
+    }
+  ]
+}

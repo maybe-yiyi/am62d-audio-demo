@@ -1,12 +1,17 @@
 option('plugins',
   type: 'array',
-  value: ['passthrough', 'webrtc', 'downmix', 'yamnet'],
+  value: ['passthrough', 'webrtc', 'downmix', 'yamnet', 'stt'],
   description: 'Plugins to build')
 
 option('yamnet_model',
   type: 'string',
   value: '',
   description: 'Path to yamnet.tflite model file; installed alongside the plugin when set')
+
+option('stt_model',
+  type: 'string',
+  value: '',
+  description: 'Path to stt.tflite keyword model; installed alongside the plugin when set')
 
 option('max_channels',
   type: 'integer',

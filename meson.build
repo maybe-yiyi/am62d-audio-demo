@@ -12,9 +12,10 @@ lilv_dep = dependency('lilv-0')
 
 executable('am62d-pipeline',
   framework_src,
-  dependencies: [dependency('libpipewire-0.3'), dl_dep, cjson_dep, lilv_dep]
+  include_directories: include_directories('.'),
+  dependencies: [dependency('libpipewire-0.3'), dl_dep, cjson_dep, lilv_dep,
+                 dependency('threads')]
 )
-
 webrtc_dep = dependency('webrtc-audio-processing-2', required: false)
 tflite_dep = dependency('tensorflow2-lite', required: false)
 
@@ -22,6 +23,13 @@ _yamnet_model = get_option('yamnet_model')
 if _yamnet_model != ''
   install_data(_yamnet_model,
     rename: 'yamnet.tflite',
+    install_dir: '/usr/lib/am62d/plugins')
+endif
+
+_stt_model = get_option('stt_model')
+if _stt_model != ''
+  install_data(_stt_model,
+    rename: 'stt.tflite',
     install_dir: '/usr/lib/am62d/plugins')
 endif
 
@@ -34,7 +42,11 @@ plugin_configs = {
   'downmix': { 'sources': ['plugins/downmix.c'], 'deps': [], 'c_args': channel_args },
   'yamnet': {
     'sources': ['plugins/yamnet.c'],
-    'deps': [tflite_dep],
+    'deps': [tflite_dep, dependency('threads')],
+  },
+  'stt': {
+    'sources': ['plugins/stt.c'],
+    'deps': [tflite_dep, dependency('threads')],
   },
 }
 
@@ -67,6 +79,7 @@ endforeach
 
 install_data('plugins/manifest.ttl', 'plugins/passthrough.ttl',
   'plugins/webrtc.ttl', 'plugins/downmix.ttl', 'plugins/yamnet.ttl',
+  'plugins/stt.ttl',
   install_dir: '/usr/lib/am62d/plugins')
 
 install_subdir('configs/', install_dir: '/usr/lib/am62d/')

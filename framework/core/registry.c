@@ -3,13 +3,11 @@
 
 #include <lilv/lilv.h>
 
+#include "registry.h"
+
 #define MAX_PLUGINS 16
 
-static struct {
-	LilvInstance *instance;
-	const LilvPlugin *plugin;
-} cache[MAX_PLUGINS];
-
+static const LilvPlugin *cache[MAX_PLUGINS];
 static int cache_count = 0;
 static LilvWorld *world = NULL;
 static char plugin_bundle_path[512];
@@ -42,20 +40,9 @@ const LilvPlugin *registry_get_plugin(const char *uri)
 {
 	for (int i = 0; i < cache_count; i++) {
 		const char *cached = lilv_node_as_uri(
-			lilv_plugin_get_uri(cache[i].plugin));
+			lilv_plugin_get_uri(cache[i]));
 		if (strcmp(cached, uri) == 0)
-			return cache[i].plugin;
-	}
-	return NULL;
-}
-
-LilvInstance *registry_get(const char *uri)
-{
-	for (int i = 0; i < cache_count; i++) {
-		const char *cached_uri = lilv_node_as_uri(
-			lilv_plugin_get_uri(cache[i].plugin));
-		if (strcmp(cached_uri, uri) == 0)
-			return cache[i].instance;
+			return cache[i];
 	}
 
 	if (cache_count >= MAX_PLUGINS) {
@@ -73,26 +60,12 @@ LilvInstance *registry_get(const char *uri)
 		return NULL;
 	}
 
-	LilvInstance *instance = lilv_plugin_instantiate(plugin, 48000.0, NULL);
-	if (!instance) {
-		fprintf(stderr, "registry: failed to instantiate '%s'\n", uri);
-		return NULL;
-	}
-
-	cache[cache_count].instance = instance;
-	cache[cache_count].plugin = plugin;
-	cache_count++;
-
-	return instance;
+	cache[cache_count++] = plugin;
+	return plugin;
 }
 
 void registry_destroy(void)
 {
-	for (int i = 0; i < cache_count; i++) {
-		lilv_instance_free(cache[i].instance);
-		cache[i].instance = NULL;
-		cache[i].plugin = NULL;
-	}
 	cache_count = 0;
 
 	if (world) {

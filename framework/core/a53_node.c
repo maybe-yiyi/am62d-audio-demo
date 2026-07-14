@@ -1,4 +1,4 @@
-#include <stdbool.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -7,6 +7,21 @@
 
 #include "a53_node.h"
 #include "param_bus.h"
+
+static void a53_publish_text(void *handle, const char *key,
+			     const char *text, float confidence)
+{
+	struct a53_node *node = handle;
+	if (!node || !key || !text)
+		return;
+
+	pthread_mutex_lock(&node->text_lock);
+	snprintf(node->outbox_key, sizeof(node->outbox_key), "%s", key);
+	snprintf(node->outbox_text, sizeof(node->outbox_text), "%s", text);
+	node->outbox_confidence = confidence;
+	node->outbox_seq++;
+	pthread_mutex_unlock(&node->text_lock);
+}
 
 static void on_process(void *data, struct spa_io_position *pos)
 {
@@ -43,7 +58,6 @@ static bool port_is_linked(const char *sym, const char **linked_ports, int n_lin
 struct a53_node *a53_node_create(struct pw_core *core,
 				 LilvWorld *world,
 				 const LilvPlugin *plugin,
-				 LilvInstance *instance,
 				 const char *node_name,
 				 const char **linked_ports,
 				 int n_linked_ports)
@@ -58,7 +72,20 @@ struct a53_node *a53_node_create(struct pw_core *core,
 		goto exit;
 
 	node->plugin = plugin;
-	node->instance = instance;
+	pthread_mutex_init(&node->text_lock, NULL);
+
+	node->params.handle = node;
+	node->params.publish_text = a53_publish_text;
+	node->params_feature.URI = AM62D_PARAMS_URI;
+	node->params_feature.data = &node->params;
+	node->features[0] = &node->params_feature;
+	node->features[1] = NULL;
+
+	node->instance = lilv_plugin_instantiate(plugin, 48000.0, node->features);
+	if (!node->instance) {
+		fprintf(stderr, "a53_node: failed to instantiate plugin\n");
+		goto free_node;
+	}
 
 	const char *plugin_uri = lilv_node_as_uri(lilv_plugin_get_uri(plugin));
 
@@ -69,7 +96,7 @@ struct a53_node *a53_node_create(struct pw_core *core,
 			PW_KEY_MEDIA_CATEGORY, "FILTER",
 			NULL));
 	if (!node->filter)
-		goto free_node;
+		goto free_instance;
 
 	pw_filter_add_listener(node->filter, &node->filter_listener,
 			&filter_events, node);
@@ -116,9 +143,18 @@ struct a53_node *a53_node_create(struct pw_core *core,
 		} else if (is_control) {
 			if (node->n_ctrl >= MAX_CTRL_PORTS)
 				goto destroy_filter;
-			node->ctrl_bufs[node->n_ctrl] = 0.0f;
-			lilv_instance_connect_port(instance, i,
-					&node->ctrl_bufs[node->n_ctrl]);
+
+			int buf_index = node->n_ctrl;
+			node->ctrl_bufs[buf_index] = 0.0f;
+			snprintf(node->ctrl_ports[buf_index].symbol,
+				 sizeof(node->ctrl_ports[buf_index].symbol),
+				 "%s", sym);
+			node->ctrl_ports[buf_index].lv2_index = i;
+			node->ctrl_ports[buf_index].buf_index = buf_index;
+			node->ctrl_ports[buf_index].is_input = is_input;
+
+			lilv_instance_connect_port(node->instance, i,
+					&node->ctrl_bufs[buf_index]);
 			node->n_ctrl++;
 		}
 	}
@@ -129,7 +165,7 @@ struct a53_node *a53_node_create(struct pw_core *core,
 	if (ret < 0)
 		goto destroy_filter;
 
-	lilv_instance_activate(instance);
+	lilv_instance_activate(node->instance);
 
 	lilv_node_free(audio_class);
 	lilv_node_free(control_class);
@@ -139,7 +175,10 @@ struct a53_node *a53_node_create(struct pw_core *core,
 
 destroy_filter:
 	pw_filter_destroy(node->filter);
+free_instance:
+	lilv_instance_free(node->instance);
 free_node:
+	pthread_mutex_destroy(&node->text_lock);
 	free(node);
 exit:
 	lilv_node_free(audio_class);
@@ -153,5 +192,7 @@ void a53_node_destroy(struct a53_node *node)
 {
 	lilv_instance_deactivate(node->instance);
 	pw_filter_destroy(node->filter);
+	lilv_instance_free(node->instance);
+	pthread_mutex_destroy(&node->text_lock);
 	free(node);
 }

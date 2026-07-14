@@ -1,4 +1,5 @@
 plugin_inc = include_directories('../../plugins')
+framework_inc = include_directories('../../framework/core', '../..')
 libm_dep = meson.get_compiler('c').find_library('m', required: true)
 thread_dep = dependency('threads')
 
@@ -11,6 +12,20 @@ test('yamnet_dsp',
     executable('test_dsp', 'test_dsp.c',
         include_directories: plugin_inc,
         dependencies: [libm_dep],
+        c_args: ['-std=c11']))
+
+test('stt_dsp',
+    executable('test_stt_dsp', 'test_stt_dsp.c',
+        include_directories: plugin_inc,
+        dependencies: [libm_dep],
+        c_args: ['-std=c11']))
+
+test('param_bus',
+    executable('test_param_bus',
+        'test_param_bus.c',
+        '../../framework/core/param_bus.c',
+        include_directories: framework_inc,
+        dependencies: [thread_dep, dependency('libpipewire-0.3'), dependency('lilv-0')],
         c_args: ['-std=c11']))
 
 test('downmix',
@@ -28,13 +43,23 @@ endif
 
 if tflite_dep.found()
     fs = import('fs')
-    _model = get_option('yamnet_model')
-    _bundle = _model != '' ? fs.parent(_model) : ''
+    _yamnet_model = get_option('yamnet_model')
+    _yamnet_bundle = _yamnet_model != '' ? fs.parent(_yamnet_model) : ''
 
     test('yamnet_tflite',
         executable('test_yamnet_tflite', 'test_yamnet_tflite.c',
             include_directories: plugin_inc,
             dependencies: [thread_dep, libm_dep, tflite_dep],
-            c_args: ['-std=c11', '-DYAMNET_BUNDLE_PATH="' + _bundle + '"']),
+            c_args: ['-std=c11', '-DYAMNET_BUNDLE_PATH="' + _yamnet_bundle + '"']),
+        timeout: 120)
+
+    _stt_model = get_option('stt_model')
+    _stt_bundle = _stt_model != '' ? fs.parent(_stt_model) : ''
+
+    test('stt_tflite',
+        executable('test_stt_tflite', 'test_stt_tflite.c',
+            include_directories: plugin_inc,
+            dependencies: [thread_dep, libm_dep, tflite_dep],
+            c_args: ['-std=c11', '-DSTT_BUNDLE_PATH="' + _stt_bundle + '"']),
         timeout: 120)
 endif
