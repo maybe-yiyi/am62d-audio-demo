@@ -20,8 +20,7 @@
 /* Port indices must match yamnet.ttl lv2:index values. */
 enum {
 	PORT_IN = 0,
-	PORT_OUT = 1,
-	PORT_CTRL_BASE = 2,
+	PORT_CTRL_BASE = 1,
 	PORT_SPEECH = PORT_CTRL_BASE + BUCKET_SPEECH,
 	PORT_ALERT = PORT_CTRL_BASE + BUCKET_ALERT,
 	PORT_LAUGH = PORT_CTRL_BASE + BUCKET_LAUGH,
@@ -47,7 +46,6 @@ SPSC_DEFINE(result, result_t, 2)
 
 struct priv {
 	const float *in;
-	float *out;
 	float *ctrl[NUM_BUCKETS];
 
 	ds_state_t ds;
@@ -144,9 +142,6 @@ static void connect_port(LV2_Handle instance, uint32_t port, void *data)
 	case PORT_IN:
 		p->in = data;
 		break;
-	case PORT_OUT:
-		p->out = data;
-		break;
 	default:
 		if (port >= PORT_SPEECH && port < (uint32_t)(PORT_SPEECH + NUM_BUCKETS))
 			p->ctrl[port - PORT_SPEECH] = data;
@@ -170,9 +165,6 @@ static void activate(LV2_Handle instance)
 static void run(LV2_Handle instance, uint32_t n_samples)
 {
 	struct priv *p = instance;
-
-	if (p->in && p->out)
-		memcpy(p->out, p->in, n_samples * sizeof(float));
 
 	const float *in = p->in;
 	for (uint32_t i = 0; i < n_samples; i++) {

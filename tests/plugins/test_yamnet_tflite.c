@@ -22,11 +22,9 @@ int main(void)
 	}
 
 	float in[256];
-	float out[256];
 	float ctrl[NUM_BUCKETS] = {0};
 
 	d->connect_port(h, PORT_IN, in);
-	d->connect_port(h, PORT_OUT, out);
 	for (int i = 0; i < NUM_BUCKETS; i++)
 		d->connect_port(h, PORT_SPEECH + i, &ctrl[i]);
 
