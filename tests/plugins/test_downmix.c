@@ -24,14 +24,12 @@ int main(void)
 	d->connect_port(h, 2, ch2);
 	d->connect_port(h, PORT_OUT, out);
 
-	d->activate(h);
 	d->run(h, 4);
 
 	/* Average of 1.0, 3.0, 5.0 = 3.0 */
 	for (int i = 0; i < 4; i++)
 		assert(out[i] == 3.0f);
 
-	d->deactivate(h);
 	d->cleanup(h);
 
 	printf("PASS: downmix_averages_connected_channels\n");
