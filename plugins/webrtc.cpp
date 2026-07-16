@@ -1,13 +1,21 @@
 #include <string.h>
 #include <memory>
 #include <cmath>
+#include <stdio.h>
 
 #include <lv2/core/lv2.h>
 
 #include <modules/audio_processing/include/audio_processing.h>
 
+extern "C" {
+#include "../framework/core/publish.h"
+}
+
 #define WEBRTC_URI "urn:am62d:webrtc"
 #define WEBRTC_FRAMES 480
+#define FLOOR_BLOCKS 192
+#define DB_FLOOR -120.0f
+#define THROTTLE_DIV 5
 
 #ifndef AM62D_MAX_CHANNELS
 #define AM62D_MAX_CHANNELS 8
@@ -33,6 +41,13 @@ struct priv {
 	int n_active;
 
 	float gate_gain[AM62D_MAX_CHANNELS];
+
+	float raw_floor_ring[FLOOR_BLOCKS];
+	float proc_floor_ring[FLOOR_BLOCKS];
+	int floor_head;
+	int raw_floor_min_idx;
+	int proc_floor_min_idx;
+	int run_counter;
 };
 
 static NSLevel map_level(int v)
@@ -69,6 +84,97 @@ static rtc::scoped_refptr<webrtc::AudioProcessing> make_apm(NSLevel level, bool 
 	return apm;
 }
 
+static float compute_rms_db(const float * const *bufs, int n_ch, int n_samp)
+{
+	float sum = 0.0f;
+	for (int ch = 0; ch < n_ch; ch++)
+		for (int i = 0; i < n_samp; i++)
+			sum += bufs[ch][i] * bufs[ch][i];
+	float rms = sqrtf(sum / (float)(n_ch * n_samp));
+	float db = rms > 0.0f ? 20.0f * log10f(rms) : DB_FLOOR;
+	return db < DB_FLOOR ? DB_FLOOR : db;
+}
+
+static float compute_peak_db(const float * const *bufs, int n_ch, int n_samp)
+{
+	float pk = 0.0f;
+	for (int ch = 0; ch < n_ch; ch++) {
+		for (int i = 0; i < n_samp; i++) {
+			float a = fabsf(bufs[ch][i]);
+			if (a > pk) pk = a;
+		}
+	}
+	float db = pk > 0.0f ? 20.0f * log10f(pk) : DB_FLOOR;
+	return db < DB_FLOOR ? DB_FLOOR : db;
+}
+
+static float update_floor(float *ring, int *min_idx, int head, float rms_db)
+{
+	float old_min = ring[*min_idx];
+	ring[head] = rms_db;
+	if (rms_db <= old_min) {
+		*min_idx = head;
+		return rms_db;
+	}
+	if (head == *min_idx) {
+		/* overwrote the minimum, rescan */
+		float mn = ring[0];
+		*min_idx = 0;
+		for (int i = 1; i < FLOOR_BLOCKS; i++) {
+			if (ring[i] < mn) {
+				mn = ring[i];
+				*min_idx = i;
+			}
+		}
+		return mn;
+	}
+	return ring[*min_idx];
+}
+
+static void publish_metrics(priv *p, int n_samp)
+{
+	const float *src[AM62D_MAX_CHANNELS];
+	const float *dst[AM62D_MAX_CHANNELS];
+	for (int ch = 0; ch < p->n_active; ch++) {
+		src[ch] = p->in_stage[ch];
+		dst[ch] = p->out_stage[ch];
+	}
+
+	float raw_rms = compute_rms_db(src, p->n_active, n_samp);
+	float raw_floor = (raw_rms > DB_FLOOR)
+			? update_floor(p->raw_floor_ring, &p->raw_floor_min_idx,
+					p->floor_head, raw_rms)
+			: raw_rms;
+
+	float proc_rms = compute_rms_db(dst, p->n_active, n_samp);
+	float proc_floor = (proc_rms > DB_FLOOR)
+			? update_floor(p->proc_floor_ring, &p->proc_floor_min_idx,
+					p->floor_head, proc_rms)
+			: proc_rms;
+
+	p->floor_head = (p->floor_head + 1) % FLOOR_BLOCKS;
+
+	p->run_counter++;
+	if (p->run_counter < THROTTLE_DIV)
+		return;
+	p->run_counter = 0;
+
+	float raw_peak = compute_peak_db(src, p->n_active, n_samp);
+	float proc_peak = compute_peak_db(dst, p->n_active, n_samp);
+
+	float raw_snr = raw_rms > raw_floor ? raw_rms - raw_floor : 0.0f;
+	float proc_snr = proc_rms > proc_floor ? proc_rms - proc_floor : 0.0f;
+
+	char json[256];
+	int len = snprintf(json, sizeof(json),
+		"{\"raw\":{\"rms\":%.1f,\"peak\":%.1f,\"floor\":%.1f,\"snr\":%.1f},"
+		"\"proc\":{\"rms\":%.1f,\"peak\":%.1f,\"floor\":%.1f,\"snr\":%.1f}}",
+		raw_rms, raw_peak, raw_floor, raw_snr,
+		proc_rms, proc_peak, proc_floor, proc_snr);
+	if (len > 0 && len < (int)sizeof(json))
+		am62d_publish("webrtc", json, (size_t)len);
+}
+
 #define GATE_THRESHOLD 0.00316f
 #define GATE_ATTACK    0.90f
 #define GATE_RELEASE   0.05f
@@ -87,8 +193,8 @@ static void gate_frame(float out[][WEBRTC_FRAMES], int n_ch,
 		float new_gain = gate_gain[ch] + coeff * (target - gate_gain[ch]);
 
 		float g0 = gate_gain[ch];
-		float dg = (new_gain - g0) / WEBRTC_FRAMES;
-		for (int i = 0; i < WEBRTC_FRAMES; i++)
+		float dg = (new_gain - g0) / (n_signal > 0 ? n_signal : WEBRTC_FRAMES);
+		for (int i = 0; i < n_signal; i++)
 			out[ch][i] *= g0 + i * dg;
 		gate_gain[ch] = new_gain;
 	}
@@ -104,6 +210,14 @@ static void activate(LV2_Handle instance)
 	p->apm = nullptr;
 	for (int i = 0; i < AM62D_MAX_CHANNELS; i++)
 		p->gate_gain[i] = 0.0f;
+	for (int i = 0; i < FLOOR_BLOCKS; i++) {
+		p->raw_floor_ring[i] = 0.0f;
+		p->proc_floor_ring[i] = 0.0f;
+	}
+	p->floor_head = 0;
+	p->raw_floor_min_idx = 0;
+	p->proc_floor_min_idx = 0;
+	p->run_counter = 0;
 }
 
 static LV2_Handle instantiate(const LV2_Descriptor *descriptor,
@@ -196,6 +310,7 @@ static void run(LV2_Handle instance, uint32_t n_samples)
 			}
 			p->apm->ProcessStream(src, p->cfg, p->cfg, dst);
 			gate_frame(p->out_stage, p->n_active, p->gate_gain, WEBRTC_FRAMES);
+			publish_metrics(p, WEBRTC_FRAMES);
 			p->in_fill = 0;
 			p->out_avail = WEBRTC_FRAMES;
 			p->out_pos = 0;
@@ -215,6 +330,12 @@ static void run(LV2_Handle instance, uint32_t n_samples)
 		}
 		p->apm->ProcessStream(src, p->cfg, p->cfg, dst);
 		gate_frame(p->out_stage, p->n_active, p->gate_gain, real);
+		for (int ch = 0; ch < p->n_active; ch++) {
+			float g = p->gate_gain[ch];
+			for (uint32_t j = real; j < WEBRTC_FRAMES; j++)
+				p->out_stage[ch][j] *= g;
+		}
+		publish_metrics(p, (int)real);
 		for (int ch = 0; ch < p->n_active; ch++)
 			memcpy(p->out_bufs[ch] + produced, p->out_stage[ch], to_emit * sizeof(float));
 		p->out_avail = WEBRTC_FRAMES - to_emit;

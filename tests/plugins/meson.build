@@ -1,6 +1,7 @@
 plugin_inc = include_directories('../../plugins')
 libm_dep = meson.get_compiler('c').find_library('m', required: true)
 thread_dep = dependency('threads')
+publish_stub = files('publish_stub.c')
 
 test('spsc_queue',
     executable('test_spsc', 'test_spsc.c',
@@ -20,7 +21,7 @@ test('downmix',
 
 if webrtc_dep.found()
     test('webrtc_channels',
-        executable('test_webrtc_channels', 'test_webrtc_channels.cpp',
+        executable('test_webrtc_channels', ['test_webrtc_channels.cpp', publish_stub],
             include_directories: plugin_inc,
             dependencies: [webrtc_dep],
             cpp_args: ['-std=c++17', '-DAM62D_MAX_CHANNELS=' + max_channels.to_string()]))
@@ -32,7 +33,7 @@ if tflite_dep.found()
     _bundle = _model != '' ? fs.parent(_model) : ''
 
     test('yamnet_tflite',
-        executable('test_yamnet_tflite', 'test_yamnet_tflite.c',
+        executable('test_yamnet_tflite', ['test_yamnet_tflite.c', publish_stub],
             include_directories: plugin_inc,
             dependencies: [thread_dep, libm_dep, tflite_dep],
             c_args: ['-std=c11', '-DYAMNET_BUNDLE_PATH="' + _bundle + '"']),
