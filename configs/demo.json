@@ -1,5 +1,6 @@
 {
   "name": "demo",
+  "channels": ["yamnet", "webrtc"],
   "nodes": [
     {
       "id": "webrtc",

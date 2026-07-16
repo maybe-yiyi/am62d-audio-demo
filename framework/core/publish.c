@@ -6,9 +6,9 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include "config.h"
 #include "publish.h"
 
-#define MAX_CHANNELS 8
 #define FIFO_PREFIX "/tmp/am62d_"
 
 struct channel {
