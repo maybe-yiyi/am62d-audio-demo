@@ -9,6 +9,7 @@
 #include "config.h"
 #include "param_bus.h"
 #include "pipeline.h"
+#include "publish.h"
 #include "registry.h"
 
 struct pipeline *pipewire_setup()
@@ -248,6 +249,11 @@ struct pipeline *pipeline_create(const char *config_path, const char *plugin_dir
 
 	registry_init(plugin_dir);
 
+	const char *chan_names[MAX_CHANNELS];
+	for (int i = 0; i < pl->config->n_channels; i++)
+		chan_names[i] = pl->config->channels[i];
+	publish_init(chan_names, pl->config->n_channels);
+
 	for (int i = 0; i < pl->config->n_nodes; i++) {
 		struct node_config node_conf = pl->config->nodes[i];
 		printf("Loading node %s\n", node_conf.id);
@@ -304,6 +310,8 @@ void pipeline_destroy(struct pipeline *pl)
 	pw_context_destroy(pl->context);
 	pw_main_loop_destroy(pl->loop);
 	pw_deinit();
+
+	publish_destroy();
 
 	config_free(pl->config);
 

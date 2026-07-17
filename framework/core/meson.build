@@ -4,5 +4,6 @@ framework_src = files(
   'pipeline.c',
   'param_bus.c',
   'config.c',
+  'publish.c',
   'main.c',
 )

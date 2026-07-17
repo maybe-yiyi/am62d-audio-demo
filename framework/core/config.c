@@ -161,6 +161,22 @@ struct pipeline_config *config_load(const char *path)
 		conf->n_ctrl_links++;
 	}
 
+	struct cJSON *channels_arr = cJSON_GetObjectItemCaseSensitive(conf->json, "channels");
+	struct cJSON *chan;
+	cJSON_ArrayForEach(chan, channels_arr) {
+		if (!cJSON_IsString(chan) || conf->n_channels >= MAX_CHANNELS)
+			continue;
+		int ret = snprintf(conf->channels[conf->n_channels],
+				sizeof(conf->channels[0]),
+				"%s", chan->valuestring);
+		if (ret >= (int)sizeof(conf->channels[0])) {
+			fprintf(stderr, "config: 'channels[%d]' name too long, skipping\n",
+				conf->n_channels);
+			continue;
+		}
+		conf->n_channels++;
+	}
+
 	return conf;
 
 cleanup_json:

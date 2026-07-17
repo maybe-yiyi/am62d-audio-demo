@@ -13,6 +13,8 @@
 #include "spsc_queue.h"
 #include "yamnet_classes.h"
 
+#include "../framework/core/publish.h"
+
 #include "tensorflow/lite/c/c_api.h"
 
 #define YAMNET_URI "urn:am62d:yamnet"
@@ -190,10 +192,23 @@ static void run(LV2_Handle instance, uint32_t n_samples)
 	if (result_try_pop(&p->result_queue, &res)) {
 		memcpy(p->ctrl_buf, res.scores, sizeof(p->ctrl_buf));
 
-		fprintf(stderr, "yamnet:");
+		/* worst-case: 11 open + N*(12+2) labels + 13 sep + N*(5+2) scores + 2 close */
+		_Static_assert(512 > 11 + NUM_BUCKETS * 14 + 13 + NUM_BUCKETS * 7 + 2,
+				"json[512] too small for yamnet output");
+		char json[512];
+		int off = 0;
+		off += snprintf(json + off, sizeof(json) - off, "{\"labels\":[");
 		for (int i = 0; i < NUM_BUCKETS; i++)
-			fprintf(stderr, " %s=%.2f", yamnet_bucket_names[i], p->ctrl_buf[i]);
-		fprintf(stderr, "\n");
+			off += snprintf(json + off, sizeof(json) - off,
+					"%s\"%s\"", i > 0 ? "," : "",
+					yamnet_bucket_names[i]);
+		off += snprintf(json + off, sizeof(json) - off, "],\"scores\":[");
+		for (int i = 0; i < NUM_BUCKETS; i++)
+			off += snprintf(json + off, sizeof(json) - off,
+					"%s%.3f", i > 0 ? "," : "",
+					p->ctrl_buf[i]);
+		off += snprintf(json + off, sizeof(json) - off, "]}");
+		am62d_publish("yamnet", json, (size_t)off);
 	}
 
 	for (int i = 0; i < NUM_BUCKETS; i++)
