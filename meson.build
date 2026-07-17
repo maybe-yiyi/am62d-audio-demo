@@ -12,7 +12,8 @@ lilv_dep = dependency('lilv-0')
 
 executable('am62d-pipeline',
   framework_src,
-  dependencies: [dependency('libpipewire-0.3'), dl_dep, cjson_dep, lilv_dep]
+  dependencies: [dependency('libpipewire-0.3'), dl_dep, cjson_dep, lilv_dep],
+  link_args: ['-Wl,--export-dynamic'],
 )
 
 webrtc_dep = dependency('webrtc-audio-processing-2', required: false)
@@ -64,6 +65,13 @@ foreach plugin : plugins
     install_dir: '/usr/lib/am62d/plugins',
   )
 endforeach
+
+executable('am62d-term',
+  'demos/am62d-term.c',
+  dependencies: [cjson_dep],
+  c_args: ['-std=c11'],
+  install: true,
+)
 
 install_data('plugins/manifest.ttl', 'plugins/passthrough.ttl',
   'plugins/webrtc.ttl', 'plugins/downmix.ttl', 'plugins/yamnet.ttl',
