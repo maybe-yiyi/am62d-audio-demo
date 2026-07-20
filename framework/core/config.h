@@ -5,6 +5,7 @@
 #define MAX_LINKS 32
 #define MAX_CTRL_LINKS 32
 #define MAX_CHANNELS 8
+#define MAX_DATA_STREAMS 8
 
 struct node_config {
 	char id[64];
@@ -30,8 +31,8 @@ struct pipeline_config {
 	int n_links;
 	struct control_link_config ctrl_links[MAX_CTRL_LINKS];
 	int n_ctrl_links;
-	char channels[MAX_CHANNELS][32];
-	int n_channels;
+	char data_streams[MAX_DATA_STREAMS][32];
+	int n_data_streams;
 	struct cJSON *json;
 };
 

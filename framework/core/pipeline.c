@@ -249,10 +249,10 @@ struct pipeline *pipeline_create(const char *config_path, const char *plugin_dir
 
 	registry_init(plugin_dir);
 
-	const char *chan_names[MAX_CHANNELS];
-	for (int i = 0; i < pl->config->n_channels; i++)
-		chan_names[i] = pl->config->channels[i];
-	publish_init(chan_names, pl->config->n_channels);
+	const char *ds_names[MAX_DATA_STREAMS];
+	for (int i = 0; i < pl->config->n_data_streams; i++)
+		ds_names[i] = pl->config->data_streams[i];
+	publish_init(ds_names, pl->config->n_data_streams);
 
 	for (int i = 0; i < pl->config->n_nodes; i++) {
 		struct node_config node_conf = pl->config->nodes[i];

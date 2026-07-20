@@ -1,6 +1,6 @@
 {
   "name": "demo",
-  "channels": ["yamnet", "webrtc"],
+  "data_streams": ["yamnet", "webrtc"],
   "nodes": [
     {
       "id": "webrtc",

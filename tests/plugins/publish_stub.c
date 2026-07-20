@@ -2,9 +2,9 @@
 
 #include <stddef.h>
 
-void am62d_publish(const char *channel, const char *json, size_t len)
+void am62d_publish(const char *data_stream, const char *json, size_t len)
 {
-	(void)channel;
+	(void)data_stream;
 	(void)json;
 	(void)len;
 }
