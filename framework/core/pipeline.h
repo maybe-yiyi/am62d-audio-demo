@@ -2,6 +2,7 @@
 #define PIPELINE_H
 
 #include <pipewire/pipewire.h>
+#include <lilv/lilv.h>
 
 #include "a53_node.h"
 #include "config.h"
@@ -43,6 +44,8 @@ struct pipeline {
 	int n_node_ids;
 	struct port_id_entry port_ids[MAX_NODE_PORTS];
 	int n_port_ids;
+
+	LilvWorld *lv2_world;
 };
 
 struct pipeline *pipeline_create(const char *config_path, const char *plugin_dir);

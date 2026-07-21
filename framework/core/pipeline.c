@@ -4,13 +4,13 @@
 #include <string.h>
 
 #include <pipewire/pipewire.h>
+#include <lilv/lilv.h>
 
 #include "a53_node.h"
 #include "config.h"
 #include "param_bus.h"
 #include "pipeline.h"
 #include "publish.h"
-#include "registry.h"
 
 struct pipeline *pipewire_setup()
 {
@@ -23,13 +23,22 @@ struct pipeline *pipewire_setup()
 	pl->core = pw_context_connect(pl->context, NULL, 0);
 	if (!pl->core) {
 		fprintf(stderr, "pipeline: failed to connect to PipeWire daemon\n");
-		pw_context_destroy(pl->context);
-		pw_main_loop_destroy(pl->loop);
-		free(pl);
-		return NULL;
+		goto err;
+	}
+
+	pl->lv2_world = lilv_world_new();
+	if (!pl->lv2_world) {
+		fprintf(stderr, "pipeline: failed to create LV2 world\n");
+		goto err;
 	}
 
 	return pl;
+
+err:
+	pw_context_destroy(pl->context);
+	pw_main_loop_destroy(pl->loop);
+	free(pl);
+	return NULL;
 }
 
 static uint32_t find_node_id(struct pipeline *pl, const char *config_id)
@@ -247,26 +256,28 @@ struct pipeline *pipeline_create(const char *config_path, const char *plugin_dir
 	pl->config = config_load(config_path);
 	printf("Loading configuration %s\n", pl->config->name);
 
-	registry_init(plugin_dir);
-
 	const char *ds_names[MAX_DATA_STREAMS];
 	for (int i = 0; i < pl->config->n_data_streams; i++)
 		ds_names[i] = pl->config->data_streams[i];
 	publish_init(ds_names, pl->config->n_data_streams);
 
+	lilv_world_load_all(pl->lv2_world);
+	if (plugin_dir) {
+		LilvNode *bundle_uri = lilv_new_file_uri(pl->lv2_world, NULL, plugin_dir);
+		lilv_world_load_bundle(pl->lv2_world, bundle_uri);
+		lilv_node_free(bundle_uri);
+	}
+
 	for (int i = 0; i < pl->config->n_nodes; i++) {
 		struct node_config node_conf = pl->config->nodes[i];
 		printf("Loading node %s\n", node_conf.id);
-
-		LilvInstance *instance = registry_get(node_conf.plugin);
-		const LilvPlugin *plugin = registry_get_plugin(node_conf.plugin);
 
 		const char *linked_ports[MAX_LINKS * 2];
 		int n_linked_ports = collect_linked_ports(pl->config, node_conf.id,
 						linked_ports, MAX_LINKS * 2);
 
-		struct a53_node *a53_node = a53_node_create(pl->core, registry_world(),
-						plugin, instance, node_conf.id,
+		struct a53_node *a53_node = a53_node_create(pl->core, pl->lv2_world,
+						node_conf.plugin, node_conf.id,
 						linked_ports, n_linked_ports);
 		if (!a53_node)
 			return NULL;
@@ -303,7 +314,7 @@ void pipeline_destroy(struct pipeline *pl)
 	for (int i = 0; i < pl->n_nodes; i++)
 		a53_node_destroy(pl->nodes[i]);
 
-	registry_destroy();
+	lilv_world_free(pl->lv2_world);
 
 	pw_proxy_destroy((struct pw_proxy *)pl->registry);
 	pw_core_disconnect(pl->core);

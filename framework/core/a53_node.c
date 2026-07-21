@@ -59,8 +59,7 @@ static bool port_is_linked(const char *sym, const char **linked_ports, int n_lin
 
 struct a53_node *a53_node_create(struct pw_core *core,
 				 LilvWorld *world,
-				 const LilvPlugin *plugin,
-				 LilvInstance *instance,
+				 const char *plugin_uri,
 				 const char *node_name,
 				 const char **linked_ports,
 				 int n_linked_ports)
@@ -74,10 +73,21 @@ struct a53_node *a53_node_create(struct pw_core *core,
 	if (!node)
 		goto exit;
 
-	node->plugin = plugin;
-	node->instance = instance;
+	LilvNode *uri_node = lilv_new_uri(world, plugin_uri);
+	const LilvPlugin *plugin = lilv_plugins_get_by_uri(
+			lilv_world_get_all_plugins(world), uri_node);
+	lilv_node_free(uri_node);
+	if (!plugin) {
+		fprintf(stderr, "a53_node: plugin '%s' not found\n", plugin_uri);
+		goto free_node;
+	}
 
-	const char *plugin_uri = lilv_node_as_uri(lilv_plugin_get_uri(plugin));
+	node->plugin = plugin;
+	node->instance = lilv_plugin_instantiate(plugin, 48000.0, NULL);
+	if (!node->instance) {
+		fprintf(stderr, "a53_node: failed to instantiate plugin '%s'\n", plugin_uri);
+		goto free_node;
+	}
 
 	node->filter = pw_filter_new(core, plugin_uri,
 		pw_properties_new(
@@ -86,7 +96,7 @@ struct a53_node *a53_node_create(struct pw_core *core,
 			PW_KEY_MEDIA_CATEGORY, "FILTER",
 			NULL));
 	if (!node->filter)
-		goto free_node;
+		goto free_instance;
 
 	pw_filter_add_listener(node->filter, &node->filter_listener,
 			&filter_events, node);
@@ -102,7 +112,7 @@ struct a53_node *a53_node_create(struct pw_core *core,
 
 		if (is_audio) {
 			if (is_optional && !port_is_linked(sym, linked_ports, n_linked_ports)) {
-				lilv_instance_connect_port(instance, i, NULL);
+				lilv_instance_connect_port(node->instance, i, NULL);
 				continue;
 			}
 
@@ -146,7 +156,7 @@ struct a53_node *a53_node_create(struct pw_core *core,
 			}
 			lilv_node_free(def);
 			node->ctrl_bufs[node->n_ctrl] = default_val;
-			lilv_instance_connect_port(instance, i,
+			lilv_instance_connect_port(node->instance, i,
 					&node->ctrl_bufs[node->n_ctrl]);
 			node->n_ctrl++;
 		}
@@ -158,7 +168,7 @@ struct a53_node *a53_node_create(struct pw_core *core,
 	if (ret < 0)
 		goto destroy_filter;
 
-	lilv_instance_activate(instance);
+	lilv_instance_activate(node->instance);
 
 	lilv_node_free(audio_class);
 	lilv_node_free(control_class);
@@ -168,6 +178,8 @@ struct a53_node *a53_node_create(struct pw_core *core,
 
 destroy_filter:
 	pw_filter_destroy(node->filter);
+free_instance:
+	lilv_instance_free(node->instance);
 free_node:
 	free(node);
 exit:

@@ -30,8 +30,7 @@ struct a53_node {
 
 struct a53_node *a53_node_create(struct pw_core *core,
 				 LilvWorld *world,
-				 const LilvPlugin *plugin,
-				 LilvInstance *instance,
+				 const char *plugin_uri,
 				 const char *node_name,
 				 const char **linked_ports,
 				 int n_linked_ports);
