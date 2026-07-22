@@ -6,7 +6,6 @@
 #include <pipewire/pipewire.h>
 
 #include "a53_node.h"
-#include "param_bus.h"
 
 /* silence_buf: read-only zeros for NULL input port fallback
  * scratch_buf: writable discard buffer for NULL output port fallback */
@@ -41,7 +40,6 @@ static void on_process(void *data, struct spa_io_position *pos)
 	}
 
 	lilv_instance_run(node->instance, n_frames);
-	param_bus_dispatch(node);
 }
 
 static const struct pw_filter_events filter_events = {

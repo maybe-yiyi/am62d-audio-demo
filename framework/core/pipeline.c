@@ -8,7 +8,6 @@
 
 #include "a53_node.h"
 #include "config.h"
-#include "param_bus.h"
 #include "pipeline.h"
 #include "publish.h"
 
@@ -56,44 +55,6 @@ static uint32_t find_port_id(struct pipeline *pl, uint32_t pw_node_id, const cha
 			strcmp(pl->port_ids[i].port_name, port_name) == 0)
 			return pl->port_ids[i].pw_port_id;
 	return SPA_ID_INVALID;
-}
-
-static struct a53_node *pipeline_find_node(struct pipeline *pl, const char *config_id)
-{
-	for (int i = 0; i < pl->n_nodes; i++)
-		if (strcmp(pl->config->nodes[i].id, config_id) == 0)
-			return pl->nodes[i];
-	return NULL;
-}
-
-static void pipeline_wire_control_links(struct pipeline *pl)
-{
-	for (int i = 0; i < pl->config->n_ctrl_links; i++) {
-		const struct control_link_config *clc = &pl->config->ctrl_links[i];
-
-		char src_node_id[128];
-		char src_port_name[128];
-		if (sscanf(clc->from, "%127[^:]:%127s", src_node_id, src_port_name) != 2) {
-			fprintf(stderr, "pipeline: malformed control link 'from': %s\n",
-				clc->from);
-			continue;
-		}
-
-		struct a53_node *src = pipeline_find_node(pl, src_node_id);
-		struct a53_node *dst = pipeline_find_node(pl, clc->to);
-		if (!src || !dst) {
-			fprintf(stderr, "pipeline: control link failed: %s -> %s\n",
-				clc->from, clc->to);
-			continue;
-		}
-
-		if (param_bus_register(src, src_port_name, dst, clc->param) < 0) {
-			fprintf(stderr, "pipeline: control link failed: %s -> %s.%s\n",
-				clc->from, clc->to, clc->param);
-			continue;
-		}
-		printf("Registered control %s -> %s.%s\n", clc->from, clc->to, clc->param);
-	}
 }
 
 static void pipeline_create_links(struct pipeline *pl)
@@ -210,7 +171,6 @@ static void on_core_done(void *data, uint32_t id, int seq)
 			pl->sync_phase = SYNC_PHASE_CREATE_LINKS;
 			break;
 		case SYNC_PHASE_CREATE_LINKS:
-			pipeline_wire_control_links(pl);
 			pipeline_create_links(pl);
 			break;
 		default:
