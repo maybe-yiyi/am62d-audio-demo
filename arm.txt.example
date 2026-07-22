@@ -1,0 +1,26 @@
+[binaries]
+c = '<SDK>/linux-devkit/sysroots/x86_64-arago-linux/usr/bin/aarch64-oe-linux/aarch64-oe-linux-gcc'
+cpp = '<SDK>/linux-devkit/sysroots/x86_64-arago-linux/usr/bin/aarch64-oe-linux/aarch64-oe-linux-g++'
+ar = '<SDK>/linux-devkit/sysroots/x86_64-arago-linux/usr/bin/aarch64-oe-linux/aarch64-oe-linux-ar'
+strip = '<SDK>/linux-devkit/sysroots/x86_64-arago-linux/usr/bin/aarch64-oe-linux/aarch64-oe-linux-strip'
+pkg-config = '<SDK>/linux-devkit/sysroots/x86_64-arago-linux/usr/bin/pkgconf'
+
+[properties]
+sys_root = '<SYSROOT>'
+pkg_config_libdir = '<SYSROOT>/usr/lib/pkgconfig:<SYSROOT>/usr/share/pkgconfig'
+
+[built-in options]
+c_args = ['--sysroot=<SYSROOT>', '-B<SYSROOT>/usr/lib/aarch64-oe-linux/15.2.0']
+cpp_args = ['--sysroot=<SYSROOT>', '-B<SYSROOT>/usr/lib/aarch64-oe-linux/15.2.0',
+            '-isystem<SYSROOT>/usr/include/c++/15.2.0',
+            '-isystem<SYSROOT>/usr/include/c++/15.2.0/aarch64-oe-linux']
+c_link_args = ['--sysroot=<SYSROOT>', '-B<SYSROOT>/usr/lib/aarch64-oe-linux/15.2.0',
+               '-L<SYSROOT>/usr/lib/aarch64-oe-linux/15.2.0']
+cpp_link_args = ['--sysroot=<SYSROOT>', '-B<SYSROOT>/usr/lib/aarch64-oe-linux/15.2.0',
+                 '-L<SYSROOT>/usr/lib/aarch64-oe-linux/15.2.0']
+
+[host_machine]
+system = 'linux'
+cpu_family = 'aarch64'
+cpu = 'cortex-A53'
+endian = 'little'
