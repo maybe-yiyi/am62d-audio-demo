@@ -4,6 +4,17 @@
 
 #include "pipeline.h"
 
+/**
+ * main() - pipeline executable entry point
+ * @argc: argument count
+ * @argv: argument vector
+ *
+ * Parses command line options to get config path and plugin directory.
+ * Blocks SIGINT and SIGTERM in main thread (handled by pipeline_run).
+ * Creates, runs, and destroys the pipeline.
+ *
+ * Return: 0 on success, 1 on failure
+ */
 int main(int argc, char *argv[]) {
 	sigset_t ss;
 	sigemptyset(&ss);

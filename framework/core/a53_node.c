@@ -7,11 +7,27 @@
 
 #include "a53_node.h"
 
-/* silence_buf: read-only zeros for NULL input port fallback
- * scratch_buf: writable discard buffer for NULL output port fallback */
+/**
+ * silence_buf: read-only zeros for NULL input port fallback
+ * scratch_buf: writable discard buffer for NULL output port fallback
+ *
+ * Static buffers used when PipeWire provides NULL buffers for ports.
+ * silence_buf provides silence (zeros) for missing inputs.
+ * scratch_buf provides discard space for missing outputs.
+ */
 static const float silence_buf[8192];
 static float scratch_buf[8192];
 
+/**
+ * on_process() - PipeWire filter process callback
+ * @data: pointer to a53_node instance
+ * @pos: stream position information
+ *
+ * Called by PipeWire when audio data needs to be processed.
+ * Connects audio buffers to LV2 plugin ports and runs the plugin instance.
+ *
+ * Return: None
+ */
 static void on_process(void *data, struct spa_io_position *pos)
 {
 	struct a53_node *node = data;
@@ -42,11 +58,28 @@ static void on_process(void *data, struct spa_io_position *pos)
 	lilv_instance_run(node->instance, n_frames);
 }
 
+/**
+ * filter_events - PipeWire filter event callbacks
+ * @process: process callback (on_process)
+ *
+ * Static initialization of PipeWire filter event handlers.
+ */
 static const struct pw_filter_events filter_events = {
 	PW_VERSION_FILTER_EVENTS,
 	.process = on_process,
 };
 
+/**
+ * port_is_linked() - check if a port should be linked
+ * @sym: port symbol to check
+ * @linked_ports: array of port symbols to link
+ * @n_linked_ports: number of port symbols in array
+ *
+ * Determines whether a given port symbol matches any of the
+ * ports specified for linking in the configuration.
+ *
+ * Return: true if port should be linked, false otherwise
+ */
 static bool port_is_linked(const char *sym, const char **linked_ports, int n_linked_ports)
 {
 	for (int i = 0; i < n_linked_ports; i++)
@@ -55,6 +88,22 @@ static bool port_is_linked(const char *sym, const char **linked_ports, int n_lin
 	return false;
 }
 
+/**
+ * a53_node_create() - create and initialize an LV2 audio node
+ * @core: pipewire core instance
+ * @world: LV2 world instance
+ * @plugin_uri: URI of the LV2 plugin to load
+ * @node_name: desired name for the pipewire node
+ * @linked_ports: array of port names to link (format: "input_port,output_port")
+ * @n_linked_ports: number of linked port pairs
+ *
+ * Creates a new LV2 audio node by:
+ * audio node wrapped in a PipeWire filter.
+ * Loads the specified LV2 plugin, creates an instance, and sets up
+ * PipeWire filter with appropriate buffers and callbacks.
+ *
+ * Return: pointer to initialized a53_node structure, or NULL on failure
+ */
 struct a53_node *a53_node_create(struct pw_core *core,
 				 LilvWorld *world,
 				 const char *plugin_uri,
@@ -188,6 +237,15 @@ exit:
 	return NULL;
 }
 
+/**
+ * a53_node_destroy() - destroy LV2 audio node and free resources
+ * @node: pointer to a53_node structure to destroy
+ *
+ * Cleans up all resources associated with an LV2 audio node:
+ * deactivates the LV2 instance, destroys the PipeWire filter, and frees the node structure.
+ *
+ * Return: None
+ */
 void a53_node_destroy(struct a53_node *node)
 {
 	lilv_instance_deactivate(node->instance);

@@ -5,6 +5,14 @@
 
 #include "config.h"
 
+/**
+ * conf_fread() - read and parse JSON configuration file
+ * @path: path to JSON configuration file
+ *
+ * Reads entire file into memory and parses it as JSON.
+ *
+ * Return: parsed cJSON object or NULL on failure
+ */
 static struct cJSON *conf_fread(const char *path)
 {
 	FILE *f = fopen(path, "r");
@@ -31,6 +39,15 @@ static struct cJSON *conf_fread(const char *path)
 	return config;
 }
 
+/**
+ * config_load() - load pipeline configuration from JSON file
+ * @path: path to JSON configuration file
+ *
+ * Loads and parses JSON configuration file into pipeline_config structure.
+ * Configuration includes nodes, links, control links, and data streams.
+ *
+ * Return: pointer to populated pipeline_config structure, or NULL on failure
+ */
 struct pipeline_config *config_load(const char *path)
 {
 	struct pipeline_config *conf = calloc(1, sizeof(struct pipeline_config));
@@ -187,6 +204,15 @@ exit:
 	return NULL;
 }
 
+/**
+ * config_free() - free pipeline configuration resources
+ * @conf: pointer to pipeline_config structure to free
+ *
+ * Frees all memory associated with pipeline configuration,
+ * including the underlying JSON structure and the config structure itself.
+ *
+ * Return: None
+ */
 void config_free(struct pipeline_config *conf)
 {
 	if (!conf)

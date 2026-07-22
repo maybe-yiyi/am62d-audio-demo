@@ -11,6 +11,11 @@
 
 #define FIFO_PREFIX "/tmp/am62d_"
 
+/**
+ * struct data_stream - data stream state for publishing
+ * @path: filesystem path to FIFO
+ * @fd: file descriptor (-1 when closed)
+ */
 struct data_stream {
 	char path[64];
 	int fd;
@@ -19,6 +24,16 @@ struct data_stream {
 static struct data_stream data_streams[MAX_DATA_STREAMS];
 static int n_data_streams = 0;
 
+/**
+ * publish_init() - initialize data publishing subsystem
+ * @names: array of data stream names
+ * @n: number of data streams
+ *
+ * Closes any existing streams and sets up named FIFOs in /tmp
+ * for each data stream. Ignores SIGPIPE to handle reader disconnects.
+ *
+ * Return: None
+ */
 void publish_init(const char **names, int n)
 {
 	/* close any fds left open from a previous call */
@@ -42,6 +57,19 @@ void publish_init(const char **names, int n)
 	}
 }
 
+/**
+ * am62d_publish() - publish JSON data to a named stream
+ * @channel: name of data stream to publish to
+ * @json: JSON data buffer
+ * @len: length of JSON data
+ *
+ * Writes JSON data to the named FIFO stream with appended newline.
+ * Opens FIFO on demand and handles partial writes or disconnections
+ * by closing the fd for retry on next call. Silently discards data
+ * when FIFO is not open or buffer is full.
+ *
+ * Return: None
+ */
 void am62d_publish(const char *channel, const char *json, size_t len)
 {
 	for (int i = 0; i < n_data_streams; i++) {
@@ -87,6 +115,14 @@ void am62d_publish(const char *channel, const char *json, size_t len)
 	}
 }
 
+/**
+ * publish_destroy() - shutdown data publishing subsystem
+ *
+ * Closes all open FIFOs, unlinks FIFO paths from filesystem,
+ * and resets internal state.
+ *
+ * Return: None
+ */
 void publish_destroy(void)
 {
 	for (int i = 0; i < n_data_streams; i++) {

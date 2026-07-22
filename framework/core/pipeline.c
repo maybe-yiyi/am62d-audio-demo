@@ -11,7 +11,15 @@
 #include "pipeline.h"
 #include "publish.h"
 
-struct pipeline *pipewire_setup()
+/**
+ * pipewire_setup() - initialize pipewire context and lv2 world
+ *
+ * Allocates and initializes pipeline structure with pipewire context,
+ * core connection, and lv2 world.
+ *
+ * Return: initialized pipeline structure or NULL on failure
+ */
+static struct pipeline *pipewire_setup(void)
 {
 	struct pipeline *pl = calloc(1, sizeof(struct pipeline));
 
@@ -40,6 +48,16 @@ err:
 	return NULL;
 }
 
+/**
+ * find_node_id() - find pipewire node id by config id
+ * @pl: pipeline instance
+ * @config_id: node identifier from configuration
+ *
+ * Searches node id table for matching config id and returns
+ * corresponding pipewire node id.
+ *
+ * Return: pipewire node id or SPA_ID_INVALID if not found
+ */
 static uint32_t find_node_id(struct pipeline *pl, const char *config_id)
 {
 	for (int i = 0; i < pl->n_node_ids; i++)
@@ -48,6 +66,17 @@ static uint32_t find_node_id(struct pipeline *pl, const char *config_id)
 	return SPA_ID_INVALID;
 }
 
+/**
+ * find_port_id() - find pipewire port id by node and port name
+ * @pl: pipeline instance
+ * @pw_node_id: pipewire node id
+ * @port_name: port name from configuration
+ *
+ * Searches port id table for matching node and port name combination
+ * and returns corresponding pipewire port id.
+ *
+ * Return: pipewire port id or SPA_ID_INVALID if not found
+ */
 static uint32_t find_port_id(struct pipeline *pl, uint32_t pw_node_id, const char *port_name)
 {
 	for (int i = 0; i < pl->n_port_ids; i++)
@@ -57,6 +86,15 @@ static uint32_t find_port_id(struct pipeline *pl, uint32_t pw_node_id, const cha
 	return SPA_ID_INVALID;
 }
 
+/**
+ * pipeline_create_links() - create links between node ports
+ * @pl: pipeline instance
+ *
+ * Iterates through link configuration and creates pipewire links
+ * between output ports of source nodes and input ports of destination nodes.
+ *
+ * Return: None
+ */
 static void pipeline_create_links(struct pipeline *pl)
 {
 	for (int i = 0; i < pl->config->n_links; i++) {
@@ -105,6 +143,17 @@ static void pipeline_create_links(struct pipeline *pl)
 	}
 }
 
+/**
+ * pipeline_record_node_id() - store node id mapping
+ * @pl: pipeline instance
+ * @config_id: node identifier from configuration
+ * @pw_id: pipewire node id
+ *
+ * Stores mapping between config node id and pipewire node id
+ * in the node ids table for later reference.
+ *
+ * Return: None
+ */
 static void pipeline_record_node_id(struct pipeline *pl, const char *config_id, uint32_t pw_id)
 {
 	if (pl->n_node_ids >= MAX_NODES)
@@ -117,6 +166,18 @@ static void pipeline_record_node_id(struct pipeline *pl, const char *config_id, 
 	pl->n_node_ids++;
 }
 
+/**
+ * pipeline_record_port_id() - store port id mapping
+ * @pl: pipeline instance
+ * @pw_node_id: pipewire node id
+ * @port_name: port name from configuration
+ * @pw_port_id: pipewire port id
+ *
+ * Stores mapping between node/port names and pipewire port id
+ * in the port ids table for later reference.
+ *
+ * Return: None
+ */
 static void pipeline_record_port_id(struct pipeline *pl, uint32_t pw_node_id,
 	const char *port_name, uint32_t pw_port_id)
 {
@@ -133,6 +194,20 @@ static void pipeline_record_port_id(struct pipeline *pl, uint32_t pw_node_id,
 	pl->n_port_ids++;
 }
 
+/**
+ * on_global() - pipewire registry global callback
+ * @data: pipeline instance
+ * @id: object id
+ * @permissions: object permissions
+ * @type: object type
+ * @version: object version
+ * @props: object properties
+ *
+ * Called by pipewire when global objects (nodes, ports) appear.
+ * Records node and port ids for later use in linking.
+ *
+ * Return: None
+ */
 static void on_global(void *data, uint32_t id, uint32_t permissions,
 		const char *type, uint32_t version,
 		const struct spa_dict *props)
@@ -150,15 +225,32 @@ static void on_global(void *data, uint32_t id, uint32_t permissions,
 		const char *port_name = spa_dict_lookup(props, PW_KEY_PORT_NAME);
 		if (node_id && port_name)
 			pipeline_record_port_id(pl, atoi(node_id), port_name, id);
-		printf("- Recieved port %s\n", port_name);
+		printf("- Received port %s\n", port_name);
 	}
 }
 
+/**
+ * registry_events - pipewire registry event handlers
+ * @global: global object callback
+ *
+ * Static initialization of pipewire registry event handlers.
+ */
 static const struct pw_registry_events registry_events = {
 	PW_VERSION_REGISTRY_EVENTS,
 	.global = on_global,
 };
 
+/**
+ * on_core_done() - pipewire core sync callback
+ * @data: pipeline instance
+ * @id: object id
+ * @seq: sequence number
+ *
+ * Called by pipewire when sync completes. Advances synchronization
+ * phase from waiting for registry to creating links.
+ *
+ * Return: None
+ */
 static void on_core_done(void *data, uint32_t id, int seq)
 {
 	struct pipeline *pl = data;
@@ -179,11 +271,29 @@ static void on_core_done(void *data, uint32_t id, int seq)
 	}
 }
 
+/**
+ * core_events - pipewire core event handlers
+ * @done: sync completion callback
+ *
+ * Static initialization of pipewire core event handlers.
+ */
 static const struct pw_core_events core_events = {
 	PW_VERSION_CORE_EVENTS,
 	.done = on_core_done,
 };
 
+/**
+ * collect_linked_ports() - collect port names to link for a node
+ * @config: pipeline configuration
+ * @node_id: node identifier
+ * @out: output array for port names
+ * @max_out: maximum number of ports to collect
+ *
+ * Scans link configuration to find all ports that should be
+ * linked for the specified node.
+ *
+ * Return: number of ports collected
+ */
 static int collect_linked_ports(struct pipeline_config *config, const char *node_id,
 		const char *out[], int max_out)
 {
@@ -207,6 +317,21 @@ static int collect_linked_ports(struct pipeline_config *config, const char *node
 	return n;
 }
 
+/**
+ * pipeline_create() - create and initialize pipeline
+ * @config_path: path to configuration file
+ * @plugin_dir: directory containing lv2 plugins
+ *
+ * Creates a new pipeline instance by:
+ * - Setting up pipewire context and lv2 world
+ * - Loading configuration from JSON file
+ * - Initializing data stream publishing
+ * - Loading lv2 plugins
+ * - Creating audio nodes
+ * - Setting up registry and core listeners
+ *
+ * Return: initialized pipeline structure or NULL on failure
+ */
 struct pipeline *pipeline_create(const char *config_path, const char *plugin_dir)
 {
 	struct pipeline *pl = pipewire_setup();
@@ -254,12 +379,30 @@ struct pipeline *pipeline_create(const char *config_path, const char *plugin_dir
 	return pl;
 }
 
+/**
+ * on_signal() - signal handler for pipeline shutdown
+ * @data: pipewire main loop
+ * @sig: signal number
+ *
+ * Handles SIGINT and SIGTERM by quitting the pipewire main loop.
+ *
+ * Return: None
+ */
 static void on_signal(void *data, int sig)
 {
 	struct pw_main_loop *loop = data;
 	pw_main_loop_quit(loop);
 }
 
+/**
+ * pipeline_run() - run pipeline main loop
+ * @pl: pipeline instance
+ *
+ * Sets up signal handlers and runs the pipewire main loop
+ * until interrupted by SIGINT or SIGTERM.
+ *
+ * Return: None
+ */
 void pipeline_run(struct pipeline *pl)
 {
 	printf("Running main loop...\n");
@@ -269,6 +412,21 @@ void pipeline_run(struct pipeline *pl)
 	pw_main_loop_run(pl->loop);
 }
 
+/**
+ * pipeline_destroy() - destroy pipeline and free resources
+ * @pl: pipeline instance
+ *
+ * Cleans up all resources associated with pipeline:
+ * - Destroys all audio nodes
+ * - Frees lv2 world
+ * - Destroys pipewire objects (registry, core, context, loop)
+ * - Deinitializes pipewire
+ * - Destroys publishing resources
+ * - Frees configuration
+ * - Frees pipeline structure
+ *
+ * Return: None
+ */
 void pipeline_destroy(struct pipeline *pl)
 {
 	for (int i = 0; i < pl->n_nodes; i++)
